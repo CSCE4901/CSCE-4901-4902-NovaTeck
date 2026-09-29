@@ -1,9 +1,7 @@
--- ============================================================
 -- NovaTeck DFW Tech Job Tracker — MySQL Database Schema
 -- Version: 2.0 (Sprint 3 MVP)
 -- Developer: Shubekshya Acharya
 -- Sprint 3 — April 2026
--- ============================================================
 
 CREATE DATABASE IF NOT EXISTS novatek_db
   CHARACTER SET utf8mb4
@@ -11,9 +9,7 @@ CREATE DATABASE IF NOT EXISTS novatek_db
 
 USE novatek_db;
 
--- ============================================================
 -- TABLE 1: Companies
--- ============================================================
 CREATE TABLE Companies (
     company_id   INT           NOT NULL AUTO_INCREMENT,
     name         VARCHAR(255)  NOT NULL,
@@ -25,9 +21,7 @@ CREATE TABLE Companies (
     UNIQUE KEY uq_company_name (name)
 ) ENGINE=InnoDB;
 
--- ============================================================
 -- TABLE 2: Jobs
--- ============================================================
 CREATE TABLE Jobs (
     job_id        INT           NOT NULL AUTO_INCREMENT,
     company_id    INT           NOT NULL,
@@ -36,9 +30,12 @@ CREATE TABLE Jobs (
     location      VARCHAR(255),
     job_type      VARCHAR(100),
     salary_range  VARCHAR(100),
+    experience_level VARCHAR(50),
     source_url    VARCHAR(1000) NOT NULL,
     date_posted   DATE,
     date_crawled  DATETIME      DEFAULT CURRENT_TIMESTAMP,
+    source_provider VARCHAR(50),
+    last_seen_at   DATETIME      DEFAULT CURRENT_TIMESTAMP,
     is_active     BOOLEAN       DEFAULT TRUE,
     PRIMARY KEY (job_id),
     UNIQUE KEY uq_source_url (source_url(500)),
@@ -47,9 +44,24 @@ CREATE TABLE Jobs (
         ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
--- ============================================================
+-- Auditable history of scheduled job ingestion runs.
+CREATE TABLE Job_Sync_Runs (
+    sync_run_id    INT           NOT NULL AUTO_INCREMENT,
+    provider       VARCHAR(50)   NOT NULL,
+    location       VARCHAR(255)  NOT NULL,
+    query          VARCHAR(255),
+    status         VARCHAR(20)   NOT NULL,
+    fetched_count  INT           NOT NULL DEFAULT 0,
+    upserted_count INT           NOT NULL DEFAULT 0,
+    error_count    INT           NOT NULL DEFAULT 0,
+    error_message  TEXT,
+    started_at     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    finished_at    DATETIME,
+    PRIMARY KEY (sync_run_id),
+    INDEX idx_sync_runs_started (started_at)
+) ENGINE=InnoDB;
+
 -- TABLE 3: Skills
--- ============================================================
 CREATE TABLE Skills (
     skill_id    INT          NOT NULL AUTO_INCREMENT,
     skill_name  VARCHAR(100) NOT NULL,
@@ -58,9 +70,7 @@ CREATE TABLE Skills (
     UNIQUE KEY uq_skill_name (skill_name)
 ) ENGINE=InnoDB;
 
--- ============================================================
 -- TABLE 4: Job_Skills  (junction table)
--- ============================================================
 CREATE TABLE Job_Skills (
     job_id            INT         NOT NULL,
     skill_id          INT         NOT NULL,
@@ -76,9 +86,7 @@ CREATE TABLE Job_Skills (
         CHECK (requirement_type IN ('required', 'preferred'))
 ) ENGINE=InnoDB;
 
--- ============================================================
 -- TABLE 5: Job_Snapshots
--- ============================================================
 CREATE TABLE Job_Snapshots (
     snapshot_id    INT          NOT NULL AUTO_INCREMENT,
     job_id         INT          NOT NULL,
@@ -92,24 +100,55 @@ CREATE TABLE Job_Snapshots (
         ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
--- ============================================================
+-- Daily, skill-level market aggregates used by trend reporting.
+CREATE TABLE Skill_Trend_Snapshots (
+    snapshot_date DATE NOT NULL,
+    skill_id INT NOT NULL,
+    active_job_count INT NOT NULL,
+    avg_salary DECIMAL(12,2) NULL,
+    PRIMARY KEY (snapshot_date, skill_id),
+    CONSTRAINT fk_trend_skill FOREIGN KEY (skill_id) REFERENCES Skills(skill_id)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
 -- TABLE 6: Users  (Students)
--- ============================================================
 CREATE TABLE Users (
     user_id        INT           NOT NULL AUTO_INCREMENT,
     name           VARCHAR(255)  NOT NULL,
     email          VARCHAR(255)  NOT NULL,
     password_hash  VARCHAR(255)  NOT NULL,
     resume_url     VARCHAR(500),
+    resume_filename VARCHAR(255),
     skills         TEXT,
     created_at     DATETIME      DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id),
     UNIQUE KEY uq_user_email (email)
 ) ENGINE=InnoDB;
 
--- ============================================================
+CREATE TABLE HR_Contacts (
+    contact_id INT NOT NULL AUTO_INCREMENT,
+    company_id INT NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    email VARCHAR(255),
+    phone VARCHAR(50),
+    PRIMARY KEY (contact_id),
+    CONSTRAINT fk_contacts_company FOREIGN KEY (company_id) REFERENCES Companies(company_id)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE Password_Reset_Tokens (
+    reset_id INT NOT NULL AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    token_hash CHAR(64) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    used_at DATETIME NULL,
+    PRIMARY KEY (reset_id),
+    UNIQUE KEY uq_reset_token_hash (token_hash),
+    CONSTRAINT fk_reset_user FOREIGN KEY (user_id) REFERENCES Users(user_id)
+        ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB;
+
 -- TABLE 7: Saved_Jobs
--- ============================================================
 CREATE TABLE Saved_Jobs (
     user_id   INT      NOT NULL,
     job_id    INT      NOT NULL,
@@ -123,9 +162,7 @@ CREATE TABLE Saved_Jobs (
         ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
--- ============================================================
 -- TABLE 8: User_Skills  (junction — for skill gap analysis)
--- ============================================================
 CREATE TABLE User_Skills (
     user_id   INT NOT NULL,
     skill_id  INT NOT NULL,
@@ -138,9 +175,7 @@ CREATE TABLE User_Skills (
         ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB;
 
--- ============================================================
 -- INDEXES
--- ============================================================
 CREATE INDEX idx_jobs_company      ON Jobs(company_id);
 CREATE INDEX idx_jobs_is_active    ON Jobs(is_active);
 CREATE INDEX idx_jobs_date_posted  ON Jobs(date_posted);
@@ -150,9 +185,11 @@ CREATE INDEX idx_jobskills_skill   ON Job_Skills(skill_id);
 CREATE INDEX idx_savedjobs_user    ON Saved_Jobs(user_id);
 CREATE INDEX idx_userskills_user   ON User_Skills(user_id);
 
--- ============================================================
+CREATE OR REPLACE VIEW v_skill_trends AS
+SELECT sts.snapshot_date, s.skill_id, s.skill_name, sts.active_job_count, sts.avg_salary
+FROM Skill_Trend_Snapshots sts JOIN Skills s ON s.skill_id = sts.skill_id;
+
 -- SEED DATA
--- ============================================================
 
 INSERT INTO Companies (name, website_url, location, industry) VALUES
 ('Texas Instruments', 'https://careers.ti.com',   'Dallas, TX',   'Semiconductor'),
@@ -176,8 +213,41 @@ INSERT INTO Skills (skill_name, skill_type) VALUES
 ('Flask',            'technical'),
 ('C++',              'technical');
 
--- Test user (password: test1234)
-INSERT INTO Users (name, email, password_hash, skills) VALUES
-('Test Student', 'student@test.com',
- '$2b$12$h.TmAJsKLjT7FKaGD90JUeEopDGRX7D9LNFN41viEtWZ5rYLfS5Ui',
- 'Python,SQL,React,Git');
+ALTER TABLE Users ADD COLUMN role ENUM('student', 'admin') NOT NULL DEFAULT 'student';
+CREATE TABLE IF NOT EXISTS Unmatched_Skills (
+    unmatched_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    skill_name VARCHAR(100) NOT NULL,
+    date_flagged DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+    reviewed_by INT NULL,
+    reviewed_at DATETIME NULL,
+    pending_key VARCHAR(100) GENERATED ALWAYS AS
+        (CASE WHEN status = 'pending' THEN skill_name ELSE NULL END) STORED,
+    UNIQUE KEY uq_pending_user_skill (user_id, pending_key),
+    INDEX idx_unmatched_status (status, date_flagged),
+    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (reviewed_by) REFERENCES Users(user_id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS User_Profile_Details (
+    user_id INT NOT NULL PRIMARY KEY,
+    details JSON NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS Application_Activity (
+    user_id INT NOT NULL,
+    job_id INT NOT NULL,
+    status ENUM('Opened employer site','Applied','Interviewing','Offer','Closed') NOT NULL DEFAULT 'Opened employer site',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, job_id),
+    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (job_id) REFERENCES Jobs(job_id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS Saved_Resumes (
+    user_id INT NOT NULL PRIMARY KEY,
+    filename VARCHAR(255) NOT NULL,
+    content MEDIUMBLOB NOT NULL,
+    detected_skills JSON NOT NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+) ENGINE=InnoDB;

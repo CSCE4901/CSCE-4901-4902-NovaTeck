@@ -1,0 +1,8 @@
+{
+  "seed_urls": ["https://jobs.lever.co/txse", "https://jobs.lever.co/shieldai", "https://jobs.lever.co/cef", "https://jobs.lever.co/lvs1", "https://jobs.lever.co/pointb", "https://job-boards.greenhouse.io/dudeperfect", "https://job-boards.greenhouse.io/galaxydigitalservices", "https://job-boards.greenhouse.io/blockchain", "https://job-boards.greenhouse.io/uberfreight"],
+  "max_depth": 3,
+  "rate_limit_seconds": 4,
+  "timeout_seconds": 30,
+  "max_retries": 3,
+  "robots_ttl_seconds": 3600
+}

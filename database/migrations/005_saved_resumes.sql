@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS Saved_Resumes (
+    user_id INT NOT NULL PRIMARY KEY,
+    filename VARCHAR(255) NOT NULL,
+    content MEDIUMBLOB NOT NULL,
+    detected_skills JSON NOT NULL,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+) ENGINE=InnoDB;

@@ -1,15 +1,4 @@
-"""
-seed_from_crawler.py — Load jobs from crawler's JSON output
-
-This script connects YOUR crawler (Suraj's module) to Shubekshya's database.
-
-Workflow:
-    1. Run: cd crawler && python3 crawler.py    # Generates jobs.json
-    2. Run: python3 seed_from_crawler.py        # Imports into MySQL
-    3. Done — database is now populated from your crawler's real output
-
-Falls back to seed_jobs.py hardcoded data if jobs.json is missing.
-"""
+"""Seed from crawler."""
 
 from dotenv import load_dotenv
 load_dotenv()

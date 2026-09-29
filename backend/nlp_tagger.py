@@ -1,10 +1,21 @@
-"""
-nlp_tagger.py  -  Sprint 3 NLP Skill Tagger
-Author : Mani Raju Kumar Velagapudi
-Project: NovaTeck - DFW Job Skills Matcher (CSCE 4901 Capstone I)
-"""
+"""Nlp tagger."""
 
 import re
+from functools import lru_cache
+
+from nltk.tokenize import RegexpTokenizer
+
+
+@lru_cache(maxsize=1)
+def skill_matcher():
+    """Skill matcher."""
+    import spacy
+    from spacy.matcher import PhraseMatcher
+    language = spacy.blank("en")
+    matcher = PhraseMatcher(language.vocab, attr="LOWER")
+    for skill in KNOWN_SKILLS:
+        matcher.add(skill, [language.make_doc(skill)])
+    return language, matcher
 
 KNOWN_SKILLS = [
     "python", "java", "javascript", "typescript", "c++", "c#", "go", "ruby",
@@ -22,6 +33,12 @@ KNOWN_SKILLS = [
     "tableau", "power bi", "excel",
     "agile", "scrum", "jira", "communication", "teamwork", "problem solving",
     "project management",
+    "systems engineering", "quality engineering", "reliability engineering",
+    "test engineering", "electrical engineering", "mechanical engineering",
+    "embedded systems", "hardware", "electronics", "aerospace", "aviation",
+    "autonomous systems", "uavs", "flight test", "verification", "validation",
+    "failure analysis", "root cause analysis", "risk management", "fmea", "fracas",
+    "as9100", "do-178c", "do-254", "simulink", "cad", "salesforce",
 ]
 
 REQUIRED_SIGNALS = [
@@ -57,14 +74,14 @@ _PREFERRED_SECTION_RE = re.compile(
 
 
 def _split_into_sections(text):
-    """Return list of (section_tag, line) where tag is 'required'/'preferred'/'unknown'."""
-    lines = text.splitlines()
+    """ split into sections."""
+    lines = RegexpTokenizer(r"[^\n]+").tokenize(text)
     current_tag = "unknown"
     sections = []
     for line in lines:
-        if _REQUIRED_SECTION_RE.search(line):
+        if _REQUIRED_SECTION_RE.match(line.strip()):
             current_tag = "required"
-        elif _PREFERRED_SECTION_RE.search(line):
+        elif _PREFERRED_SECTION_RE.match(line.strip()):
             current_tag = "preferred"
         sections.append((current_tag, line))
     return sections
@@ -81,47 +98,40 @@ def _tag_sentence(sentence, section_default):
     return "required"
 
 
+def _skill_pattern(skill):
+    """Match punctuated skills (for example C++ and CI/CD) correctly."""
+    return r"(?<!\w)" + re.escape(skill) + r"(?!\w)"
+
+
 def tag_skills_for_job(description):
-    """
-    Parse one job description string and return tagged skills.
-    Returns list of dicts: [{"skill_name": "python", "requirement_type": "required"}, ...]
-    """
+    """Tag skills for job."""
     if not description:
         return []
 
-    sections   = _split_into_sections(description)
-    desc_lower = description.lower()
-    tagged     = {}
-
-    for section_tag, line in sections:
-        line_lower = line.lower()
-        for skill in KNOWN_SKILLS:
-            pattern = r"\b" + re.escape(skill) + r"\b"
-            if re.search(pattern, line_lower):
-                tag = _tag_sentence(line, section_tag)
-                if tagged.get(skill) == "required":
+    language, matcher = skill_matcher()
+    tagged = {}
+    for section_tag, line in _split_into_sections(description):
+        # Split requirements without breaking names like Node.js.
+        for sentence in re.split(r"(?<=[.!?;])\s+|\s+(?:but|whereas)\s+", line):
+            document = language.make_doc(sentence)
+            for match_id, start, end in matcher(document):
+                skill = language.vocab.strings[match_id]
+                if not re.search(_skill_pattern(skill), sentence, re.IGNORECASE):
                     continue
-                tagged[skill] = tag
-
-    for skill in KNOWN_SKILLS:
-        if skill in tagged:
-            continue
-        pattern = r"\b" + re.escape(skill) + r"\b"
-        if re.search(pattern, desc_lower):
-            tagged[skill] = "required"
-
-    return [{"skill_name": s, "requirement_type": t} for s, t in tagged.items()]
+                tag = _tag_sentence(sentence, section_tag)
+                if tagged.get(skill) != "required":
+                    tagged[skill] = tag
+    return [{"skill_name": skill, "requirement_type": tagged[skill]}
+            for skill in KNOWN_SKILLS if skill in tagged]
 
 
 def run_pipeline():
-    """
-    Fetch every job from the database, run NLP tagging on each description,
-    and write results to the Skills + Job_Skills tables.
-    """
+    """Run pipeline."""
     import db
     print("[nlp_tagger] Starting NLP pipeline...")
 
-    jobs = db.get_jobs()
+    # Include all active jobs.
+    jobs = db.get_jobs(limit=500)
     if not jobs:
         print("[nlp_tagger] No jobs found. Run the crawler first.")
         return
@@ -137,6 +147,8 @@ def run_pipeline():
             continue
 
         skills = tag_skills_for_job(description)
+        # Replace old skill tags.
+        db.clear_job_skills(job_id)
 
         for item in skills:
             skill_name       = item["skill_name"]

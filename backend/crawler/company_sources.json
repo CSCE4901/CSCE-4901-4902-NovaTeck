@@ -1,0 +1,11 @@
+[
+  {"name": "TXSE", "provider": "TXSE", "board": "txse", "careers_url": "https://jobs.lever.co/txse", "source_type": "lever"},
+  {"name": "Shield AI", "provider": "Shield AI", "board": "shieldai", "careers_url": "https://jobs.lever.co/shieldai", "source_type": "lever"},
+  {"name": "City IT", "provider": "City IT", "board": "cef", "careers_url": "https://jobs.lever.co/cef", "source_type": "lever"},
+  {"name": "Long View Systems", "provider": "Long View Systems", "board": "lvs1", "careers_url": "https://jobs.lever.co/lvs1", "source_type": "lever"},
+  {"name": "Point B", "provider": "Point B", "board": "pointb", "careers_url": "https://jobs.lever.co/pointb", "source_type": "lever"},
+  {"name": "Dude Perfect", "provider": "Dude Perfect", "board": "dudeperfect", "careers_url": "https://job-boards.greenhouse.io/dudeperfect", "source_type": "greenhouse"},
+  {"name": "Galaxy", "provider": "Galaxy", "board": "galaxydigitalservices", "careers_url": "https://job-boards.greenhouse.io/galaxydigitalservices", "source_type": "greenhouse"},
+  {"name": "Blockchain.com", "provider": "Blockchain.com", "board": "blockchain", "careers_url": "https://job-boards.greenhouse.io/blockchain", "source_type": "greenhouse"},
+  {"name": "Uber Freight", "provider": "Uber Freight", "board": "uberfreight", "careers_url": "https://job-boards.greenhouse.io/uberfreight", "source_type": "greenhouse"}
+]

@@ -6,3 +6,13 @@ __pycache__/
 node_modules/
 dist/
 .Rhistory
+
+.venv/
+.env
+backend/uploads/
+*.log
+tmp/
+coverage.xml
+.coverage
+backend/dev_account.py
+ops/com.novateck.jobsync.plist

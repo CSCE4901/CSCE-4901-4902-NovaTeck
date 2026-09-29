@@ -1,0 +1,1 @@
+ALTER TABLE Jobs ADD COLUMN source_http_status SMALLINT UNSIGNED NULL;

@@ -1,13 +1,4 @@
-"""
-seed_jobs.py  —  NovaTeck Sprint 3 MVP Seed Data
-Developer: Shubekshya Acharya
-
-Run AFTER applying novatek_schema_v2.sql:
-    python seed_jobs.py
-
-This inserts 51 realistic job postings for Texas Instruments, AT&T, and
-Raytheon, then runs the NLP tagger to populate Job_Skills.
-"""
+"""Seed jobs."""
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -15,9 +6,7 @@ load_dotenv()
 import db
 from nlp_tagger import tag_skills_for_job
 
-# ------------------------------------------------------------------
 # Raw job data — 17 jobs per company
-# ------------------------------------------------------------------
 
 JOBS = [
     # ---- Texas Instruments ----------------------------------------
