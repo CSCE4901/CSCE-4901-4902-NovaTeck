@@ -47,7 +47,11 @@ def main():
         assert client.get(f'/api/students/{user + 1}/profile-details', headers=headers).status_code == 403
         assert client.put(profile_path, headers=headers, json={'name': 'Test', 'email': 'student@example.test', 'details': {'experience': [{'start': '2024-01-01', 'end': '2020-01-01'}]}}).status_code == 400
         applications_path = f'/api/students/{user}/applications'
+        recommendations = db.get_recommendations(user)
+        assert [row['job_id'] for row in recommendations] == [job], recommendations
         assert client.post(applications_path, headers=headers, json={'job_id': job, 'status': 'Applied'}).status_code == 200
+        recommendations = db.get_recommendations(user)
+        assert recommendations == [], recommendations
         assert client.get(applications_path, headers=headers).json[0]['status'] == 'Applied'
         assert client.post(applications_path, headers=headers, json={'job_id': job, 'status': 'Fake'}).status_code == 400
         assert client.get('/api/admin/overview', headers=headers).status_code == 403
@@ -55,7 +59,6 @@ def main():
         before = db.get_skill_gap(user, job)
         assert db.get_job_count(q='Software') == 1
         assert db.get_job_count(q='no-such-title') == 0
-        assert db.get_recommendations(user)[0]['job_id'] == job
         db.generate_skill_trend_snapshot()
         assert db.get_market_trends()
         assert client.get('/api/students/'+str(user)+'/recommendations', headers=headers).status_code == 200
