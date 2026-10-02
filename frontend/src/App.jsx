@@ -1,3 +1,12 @@
+import MatchExplanation from "./components/MatchExplanation";
+import { careerCategories } from './careerCategories';
+import BookmarkIcon from "./components/BookmarkIcon";
+import ContactSupport from "./components/ContactSupport";
+import CareerChat from "./components/CareerChat";
+import ResumeMatch from "./components/ResumeMatch";
+import CompanyLogo from "./components/CompanyLogo";
+import NavIcon from "./components/NavIcon";
+import NovaLogo from "./components/NovaLogo";
 import HomePage from "./components/HomePage";
 import { responseError } from "./apiErrors";
 import { useState, useEffect, createContext, useContext } from "react";
@@ -39,6 +48,14 @@ export default function App() {
   });
   const [page, setPage] = useState(() => new URLSearchParams(window.location.search).get("resetToken") ? "reset" : (auth ? (["/admin", "/admin/flagged-skills"].includes(window.location.pathname) ? "admin" : "jobs") : "login"));
   const [selectedJobId, setSelectedJobId] = useState(null);
+  const [theme, setTheme] = useState(() => localStorage.getItem("nt_theme") || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+  const [deviceTheme, setDeviceTheme] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  useEffect(() => {
+    const device = window.matchMedia('(prefers-color-scheme: dark)');
+    const apply = () => { const detected = device.matches ? 'dark' : 'light'; setDeviceTheme(detected); document.documentElement.dataset.theme = theme === 'system' ? detected : theme; };
+    apply(); localStorage.setItem('nt_theme', theme); device.addEventListener('change', apply);
+    return () => device.removeEventListener('change', apply);
+  }, [theme]);
 
   useEffect(() => {
     if (!auth) return;
@@ -90,14 +107,15 @@ export default function App() {
 
   return (
     <AuthContext.Provider value={auth}>
-      <div style={{ minHeight: "100vh", background: "#f0f4f8", fontFamily: "Segoe UI, sans-serif" }}>
-        {!["login", "register"].includes(page) && <Navbar page={page} setPage={setPage} logout={logout} auth={auth} />}
-        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "24px 16px" }}>
+      <div className="app-shell">
+        {!["login", "register"].includes(page) && <Navbar page={page} setPage={setPage} logout={logout} auth={auth} theme={theme} deviceTheme={deviceTheme} setTheme={setTheme} toggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} />}
+        <div className="nova-page-container">
+          {["login", "register"].includes(page) && <div className="nova-auth-theme"><ThemeToggle theme={theme} onToggle={() => setTheme(theme === "dark" ? "light" : "dark")} /></div>}
           {page === "login"     && <LoginPage onLogin={login} setPage={setPage} />}
           {page === "register"  && <RegisterPage onLogin={login} setPage={setPage} />}
           {page === "forgot"    && <ForgotPasswordPage setPage={setPage} />}
           {page === "reset"     && <ResetPasswordPage setPage={setPage} />}
-          {page === "home" && auth && <HomePage setPage={setPage} />}
+          {page === "home" && auth && <HomePage setPage={setPage} auth={auth} request={apiFetch} goJob={goJob} />}
           {page === "jobs"      && <JobListingsPage goJob={goJob} />}
           {page === "detail"    && <WireJobDetail auth={auth} request={apiFetch} jobId={selectedJobId} goJob={goJob} setPage={setPage} />}
           {page === "dashboard" && <WireDashboard auth={auth} request={apiFetch} goJob={goJob} setPage={setPage} />}
@@ -105,41 +123,47 @@ export default function App() {
           {page === "skillgap"  && <WireSkillGap auth={auth} request={apiFetch} setPage={setPage} />}
           {page === "admin" && auth && <WireAdmin auth={auth} request={apiFetch} onForbidden={() => { window.history.replaceState({}, "", "/"); setPage("dashboard"); }} />}
         </div>
+        <ContactSupport token={auth?.token} />
       </div>
     </AuthContext.Provider>
   );
 }
 
+function ThemeToggle({ theme, onToggle }) { return <button type="button" className="nova-theme-toggle" onClick={() => onToggle()} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">{theme === "dark" ? <><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2" /></> : <path d="M20.5 14A9 9 0 0 1 10 3.5 9 9 0 1 0 20.5 14Z" />}</svg></button>; }
+
+function ThemeToggleIcon({ theme }) { return <span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span>; }
+
 // Navbar
-function Navbar({ page, setPage, logout, auth }) {
-  const active = p => ({
-    cursor: "pointer", padding: "8px 16px", borderRadius: 6,
-    background: page === p ? "#1e40af" : "transparent",
-    color: "#fff", fontWeight: page === p ? 700 : 400,
-    border: "none", fontSize: 14,
-  });
+function Navbar({ page, setPage, logout, auth, theme, deviceTheme, setTheme, toggleTheme }) {
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [restoring, setRestoring] = useState(false), [restoreMessage, setRestoreMessage] = useState('');
+  async function restoreHidden() {
+    setRestoring(true); setRestoreMessage('');
+    try { const result = await apiFetch('/hidden-jobs/restore', {method:'POST', body:JSON.stringify({})}, auth.token); setRestoreMessage(result.count ? 'Hidden jobs restored.' : 'No hidden jobs to restore.'); window.dispatchEvent(new Event('novateck-recommendations-refresh')); }
+    catch (error) { setRestoreMessage(error.message); }
+    finally { setRestoring(false); }
+  }
+  const [mobileOpen, setMobileOpen] = useState(false);
+  useEffect(() => { setMobileOpen(false); setSettingsOpen(false); }, [page]);
+  const tabs = [
+    ['home', 'Home'], ['jobs', 'Jobs'], ['dashboard', 'Dashboard'],
+    ['skillgap', 'Skill Gap'], ['profile', 'Profile'],
+    ...(auth?.role === 'admin' ? [['admin', 'Admin']] : []),
+  ];
   return (
-    <nav style={{ background: "#1e3a8a", padding: "0 24px", display: "flex", alignItems: "center", gap: 4, height: 56 }}>
-      <span style={{ color: "#93c5fd", fontWeight: 800, fontSize: 18, marginRight: 24 }}>
-        🚀 NovaTeck
-      </span>
-      {auth && <button style={active("home")} onClick={() => setPage("home")}>Home</button>}
-      {auth && <button style={active("jobs")} onClick={() => setPage("jobs")}>Jobs</button>}
-      {auth && <button style={active("dashboard")} onClick={() => setPage("dashboard")}>Dashboard</button>}
-      {auth && <button style={active("profile")} onClick={() => setPage("profile")}>Profile</button>}
-      {auth && <button style={active("skillgap")} onClick={() => setPage("skillgap")}>Skill Gap</button>}
-      {auth?.role === "admin" && <button style={active("admin")} onClick={() => setPage("admin")}>Admin</button>}
-      <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
-        {auth ? (
-          <>
-            <button onClick={logout} style={{ background: "#dc2626", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 13 }}>Logout</button>
-          </>
-        ) : (
-          <>
-            <button onClick={() => setPage("login")} style={{ background: "transparent", color: "#bfdbfe", border: "1px solid #3b82f6", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 13 }}>Login</button>
-            <button onClick={() => setPage("register")} style={{ background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontSize: 13 }}>Register</button>
-          </>
-        )}
+    <nav className={`nova-nav${mobileOpen ? " is-mobile-open" : ""}`} aria-label="Main navigation" onKeyDown={event => { if (event.key === "Escape") setMobileOpen(false); }}>
+      <button className="nova-brand" onClick={() => setPage(auth ? 'home' : 'login')} aria-label="NovaTeck home"><NovaLogo /></button>
+      <button type="button" className="nova-mobile-menu" aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={mobileOpen} aria-controls="nova-navigation-links" onClick={() => setMobileOpen(value => !value)}><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d={mobileOpen ? 'M6 6l12 12M6 18 18 6' : 'M4 6h16M4 12h16M4 18h16'} /></svg></button>
+      <div className="nova-nav-links" id="nova-navigation-links">
+        {auth && tabs.map(([key, label]) => <button key={key} className="nova-nav-tab" aria-current={page === key ? 'page' : undefined} onClick={() => setPage(key)}><NavIcon name={key} />{label}</button>)}
+        {auth && <CareerChat key={auth.user_id} token={auth.token} />}
+      </div>
+      <div className="nova-nav-account">
+        <div className="nova-settings-wrap"><button type="button" className="nova-theme-toggle" aria-label="Settings" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(value => !value)}><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M9.5 3h5l.7 2.6 2 .9 2.4-.7 2.5 4.4-1.8 1.9v2l1.8 1.9-2.5 4.4-2.4-.7-2 .9-.7 2.4h-5l-.7-2.4-2-.9-2.4.7-2.5-4.4 1.8-1.9v-2L2 10.2l2.5-4.4 2.4.7 2-.9Z" /><circle cx="12" cy="12.5" r="3.3" /></svg></button>{settingsOpen && <><button className="nova-settings-backdrop" type="button" aria-label="Close settings" onClick={() => setSettingsOpen(false)} /><div className="nova-settings-panel" onKeyDown={event => { if (event.key === 'Escape') setSettingsOpen(false); }}><header><h2>Settings</h2><button type="button" className="text-button" aria-label="Close settings" onClick={() => setSettingsOpen(false)}>×</button></header><p>Appearance</p><select className="nova-settings-option" aria-label="Appearance" value={theme} onChange={event => setTheme(event.target.value)}><option value="light">Light</option><option value="dark">Dark</option><option value="system">Use device theme</option></select>{auth && <><p>Job preferences</p><button type="button" className="wf-secondary nova-settings-option" disabled={restoring} onClick={restoreHidden}>{restoring ? 'Restoring…' : 'Restore Hidden Jobs'}</button>{restoreMessage && <small className="nova-device-theme-note" role="status">{restoreMessage}</small>}</>}<p>Account & help</p><button type="button" className="wf-secondary nova-settings-option" onClick={() => { setSettingsOpen(false); setPage('forgot'); }}>Reset Password</button><button type="button" className="wf-secondary nova-settings-option" onClick={() => { setSettingsOpen(false); window.dispatchEvent(new Event('novateck-contact-support')); }}>Contact Support</button></div></>}</div>
+        {auth ? <button className="nova-nav-exit" onClick={logout}><NavIcon name="logout" />Logout</button> : <>
+          <button className="nova-nav-exit" onClick={() => setPage('login')}><NavIcon name="login" />Login</button>
+          <button className="nova-nav-exit" onClick={() => setPage('register')}><NavIcon name="register" />Register</button>
+        </>}
       </div>
     </nav>
   );
@@ -183,7 +207,7 @@ function LoginPage({ onLogin, setPage }) {
 
 function AuthLayout({ title, variant, setPage, children }) {
   return <main className={`auth-layout auth-layout--${variant}`}>
-    <header className="auth-brand-row"><button type="button" className="auth-brand" onClick={() => setPage("login")} aria-label="NovaTeck home">🚀 NovaTeck</button></header>
+    <header className="auth-brand-row"><button type="button" className="auth-brand" onClick={() => setPage("login")} aria-label="NovaTeck home"><NovaLogo /></button></header>
     <h1 className="auth-title">{title}</h1>
     {children}
   </main>;
@@ -223,17 +247,21 @@ function ForgotPasswordPage({ setPage }) {
 function ResetPasswordPage({ setPage }) {
   const [token, setToken] = useState(() => new URLSearchParams(window.location.search).get("resetToken") || "");
   const [password, setPassword] = useState(""); const [confirm, setConfirm] = useState(""); const [message, setMessage] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [success, setSuccess] = useState(false);
   async function submit() {
+    setSuccess(false);
     if (!PASSWORD_PATTERN.test(password)) return setMessage("Use 8+ characters with uppercase, lowercase, and a number.");
     if (password !== confirm) return setMessage("Passwords do not match.");
-    try { setMessage((await apiFetch("/auth/password-reset/confirm", { method: "POST", body: JSON.stringify({ token, password }) })).message); window.history.replaceState({}, "", window.location.pathname); setToken(""); setTimeout(() => setPage("login"), 1200); }
+    try { setMessage((await apiFetch("/auth/password-reset/confirm", { method: "POST", body: JSON.stringify({ token, password }) })).message); setSuccess(true); window.history.replaceState({}, "", window.location.pathname); setToken(""); setTimeout(() => setPage("login"), 1200); }
     catch (e) { setMessage(e.message); }
   }
   return <div style={{ maxWidth: 420, margin: "60px auto" }}><Card>
-    <h2 style={hStyle}>Choose a New Password</h2>{message && <p style={{ color: "#047857", fontSize: 14 }}>{message}</p>}
-    <Label>Reset token</Label><Input label="Reset token" value={token} onChange={setToken} placeholder="From your reset email" />
-    <Label>New password</Label><Input label="New password" type="password" value={password} onChange={setPassword} />
-    <Label>Confirm password</Label><Input label="Confirm password" type="password" value={confirm} onChange={setConfirm} />
+    <h2 style={hStyle}>Choose a New Password</h2>{message && <p role={success ? "status" : "alert"} style={{ color: success ? "#047857" : "#b91c1c", fontSize: 14 }}>{message}</p>}
+    <p style={{ color: "#6b7280", marginBottom: 24 }}>Enter and confirm your new password below.</p>
+    <Label>New password</Label><Input label="New password" type={showPassword ? "text" : "password"} value={password} onChange={setPassword} />
+    <Label>Confirm password</Label><Input label="Confirm password" type={showPassword ? "text" : "password"} value={confirm} onChange={setConfirm} />
+    <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 20, cursor: "pointer" }}><input type="checkbox" checked={showPassword} onChange={(event) => setShowPassword(event.target.checked)} />Show passwords</label>
     <Btn onClick={submit} full>Update Password</Btn>
   </Card></div>;
 }
@@ -296,10 +324,12 @@ function RegisterPage({ onLogin, setPage }) {
 // JobListingsPage
 function JobListingsPage({ goJob }) {
   const auth = useAuth();
+  const [focus, setFocus] = useState([]);
+  const [sort, setSort] = useState("match");
   const [jobs, setJobs]         = useState([]);
   const [loading, setLoading]   = useState(true);
   const [query, setQuery] = useState("");
-  const [skill, setSkill]       = useState("");
+  const [skill, setSkill]       = useState([]);
   const [location, setLocation] = useState("");
   const [companyId, setCompanyId] = useState("");
   const [experience, setExperience] = useState("");
@@ -309,12 +339,54 @@ function JobListingsPage({ goJob }) {
   const [total, setTotal]       = useState(0);
   const [msg, setMsg]           = useState("");
 
-  async function load(nextPage = page, resetFilters = false) {
+  const [savedIds, setSavedIds] = useState([]), [saving, setSaving] = useState(null), [savedReady, setSavedReady] = useState(false);
+  const [applicationStatuses, setApplicationStatuses] = useState({});
+  useEffect(() => {
+    let active = true;
+    if (!auth) return;
+    apiFetch(`/students/${auth.user_id}/applications`, {}, auth.token).then(rows => { if (active) setApplicationStatuses(Object.fromEntries(rows.map(row => [row.job_id, row.status]))); }).catch(error => active && setMsg(error.message));
+    apiFetch(`/students/${auth.user_id}/saved-jobs`, {}, auth.token).then(rows => { if (active) { setSavedIds(rows.map(row => row.job_id)); setSavedReady(true); } }).catch(error => active && setMsg(error.message));
+    return () => { active = false; };
+  }, [auth?.user_id, auth?.token]);
+  async function toggleSave(job) {
+    if (!auth || saving !== null || !savedReady) return;
+    setSaving(job.job_id); setMsg('');
+    const saved = savedIds.includes(job.job_id);
+    try {
+      await apiFetch(saved ? `/saved-jobs/${job.job_id}` : '/saved-jobs', { method: saved ? 'DELETE' : 'POST', ...(saved ? {} : { body: JSON.stringify({ job_id: job.job_id }) }) }, auth.token);
+      setSavedIds(current => saved ? current.filter(id => id !== job.job_id) : [...current, job.job_id]);
+    } catch (error) { setMsg(error.message); } finally { setSaving(null); }
+  }
+  async function trackOpening(job) {
+    if (!auth) return;
+    try {
+      const applications = await apiFetch(`/students/${auth.user_id}/applications`, {}, auth.token);
+      const existing = applications.find(row => row.job_id === job.job_id);
+      if (!existing) await apiFetch(`/students/${auth.user_id}/applications`, { method: 'POST', body: JSON.stringify({ job_id: job.job_id, status: 'Opened employer site' }) }, auth.token);
+      setApplicationStatuses(current => ({ ...current, [job.job_id]: existing?.status || 'Opened employer site' }));
+      await load(page);
+    } catch (error) { setMsg(error.message); }
+  }
+  const [filterFeedback, setFilterFeedback] = useState('');
+  useEffect(() => { setFilterFeedback(''); }, [focus, skill, workTypes, experience, location, companyId, query]);
+  useEffect(() => {
+    if (!filterFeedback) return;
+    const timer = setTimeout(() => setFilterFeedback(''), 4000);
+    return () => clearTimeout(timer);
+  }, [filterFeedback]);
+  async function applyFilters() {
+    setFilterFeedback('');
+    const count = await load(0);
+    if (count !== undefined) setFilterFeedback(`✓ Filters applied · ${count} jobs found`);
+  }
+  async function load(nextPage = page, resetFilters = false, nextSort = sort, nextFocus = focus) {
     setLoading(true);
     try {
       const params = new URLSearchParams();
+      params.append("sort", nextSort);
+      if (!resetFilters) nextFocus.forEach(value => params.append("discipline", value));
       if (!resetFilters && query) params.append("q", query);
-      if (!resetFilters && skill) params.append("skill", skill);
+      if (!resetFilters) skill.forEach(value => params.append("skill", value));
       if (!resetFilters && location) params.append("location", location);
       if (!resetFilters && companyId) params.append("company_id", companyId);
       if (!resetFilters && experience) params.append("experience", experience);
@@ -328,42 +400,46 @@ function JobListingsPage({ goJob }) {
       setJobs(Array.isArray(data) ? data : []);
       setTotal(count.total || 0);
       setPage(nextPage);
+      setMsg("");
+      setLoading(false);
+      return count.total || 0;
     } catch (error) { setJobs([]); setTotal(0); setMsg(error.message); }
     setLoading(false);
   }
 
   useEffect(() => {
     apiFetch("/search-options", {}, auth?.token).then(setOptions).catch(() => {});
-    load(0);
+    apiFetch(`/students/${auth.user_id}/profile-details`, {}, auth.token).then(details => { const initialFocus = details.career_focus ? [details.career_focus] : []; setFocus(initialFocus); load(0, false, sort, initialFocus); }).catch(() => load(0));
   }, []);
 
   function clearFilters() {
-    setWorkTypes([]); setQuery(""); setSkill(""); setLocation(""); setCompanyId(""); setExperience("");
+    setFocus([]); setWorkTypes([]); setQuery(""); setSkill([]); setLocation(""); setCompanyId(""); setExperience("");
     load(0, true);
   }
 
   return (
     <main className="wf-page">
-      <h1 style={{ fontSize: 24, fontWeight: 700, color: "#1e3a8a", marginBottom: 4 }}>DFW Tech Jobs</h1>
+      <p className="nova-eyebrow">FIND YOUR NEXT MOVE</p><h1>DFW Tech Jobs</h1>
       <p style={{ color: "#6b7280", marginBottom: 20 }}>Browse and filter jobs from top DFW technology companies</p>
 
-      <div className="wf-search-row"><label htmlFor="job-search">Search</label><input id="job-search" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => event.key === "Enter" && load(0)} /><button className="primary-button" onClick={() => load(0)}>Search</button></div>
-      <section className="wf-filters"><h2>Filters</h2>
-        <div className="wf-field"><span>Work Type</span><div className="wf-inline">{['Full-time', 'Part-time', 'Contract'].map(type => <label key={type}><input type="checkbox" checked={workTypes.includes(type)} onChange={e => setWorkTypes(e.target.checked ? [...workTypes, type] : workTypes.filter(t => t !== type))} /> {type}</label>)}</div></div>
-        <div className="wf-field"><span>Skills</span><div className="wf-tags">{['Python', 'SQL', 'React', 'Java'].map(value => <button className="wf-tag" aria-pressed={skill === value} key={value} onClick={() => setSkill(skill === value ? '' : value)}>{value}</button>)}<input aria-label="Filter by skill" value={skill} onChange={e => setSkill(e.target.value)} list="skill-options" /><datalist id="skill-options">{options.skills.map(value => <option key={value} value={value} />)}</datalist></div></div>
-        <div className="wf-field"><span>Experience</span><div className="wf-inline">{[['entry','Entry / intern'],['mid','Mid-level'],['senior','Senior / lead']].map(([value,label]) => <label key={value}><input type="checkbox" checked={experience.split(',').includes(value)} onChange={e => setExperience(e.target.checked ? [...experience.split(',').filter(Boolean),value].join(',') : experience.split(',').filter(v => v !== value).join(','))} /> {label}</label>)}</div></div>
-        <div className="wf-field"><span>Location / Company</span><div className="wf-inline"><input aria-label="Filter by location" value={location} onChange={e => setLocation(e.target.value)} list="location-options" /><datalist id="location-options">{options.locations.map(value => <option key={value} value={value} />)}</datalist><select aria-label="Filter by company" value={companyId} onChange={e => setCompanyId(e.target.value)}><option value="">All companies</option>{options.companies.map(c => <option key={c.company_id} value={c.company_id}>{c.name}</option>)}</select><button className="wf-secondary" onClick={clearFilters}>Clear Filters</button></div></div>
+      <div className="wf-search-row nova-job-search"><div className="nova-job-search-input"><NavIcon name="jobs" /><input id="job-search" aria-label="Search jobs" placeholder="Search job titles, companies, or keywords" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => event.key === "Enter" && load(0)} /></div><button className="primary-button" onClick={() => load(0)}>Search</button></div>
+      <section className="wf-filters nova-filter-panel"><header className="nova-filter-heading"><div className="nova-filter-title"><span className="nova-filter-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6" /></svg></span><div><h2>Filters</h2><p>Fine-tune your next opportunity.</p></div></div><span className="nova-filter-count">{workTypes.length + experience.split(',').filter(Boolean).length + skill.length + focus.length + [location.trim(), companyId].filter(Boolean).length} selected</span></header>
+        <div className="wf-field"><span id="job-focus-label">Career Focus</span><details className="nova-skill-select"><summary aria-labelledby="job-focus-label job-focus-summary"><span id="job-focus-summary">{focus.length === 1 ? careerCategories.find(([value]) => value === focus[0])?.[1] : focus.length ? `${focus.length} career fields selected` : 'All Career Categories'}</span><span aria-hidden="true">⌄</span></summary><div className="nova-skill-options"><button type="button" className="text-button" onClick={() => setFocus([])}>All Career Categories</button>{careerCategories.filter(([value]) => value).map(([value, label]) => <label key={value}><input type="checkbox" checked={focus.includes(value)} onChange={event => setFocus(current => event.target.checked ? [...current, value] : current.filter(item => item !== value))} />{label}</label>)}</div></details></div><div className="wf-field"><span>Work Type</span><div className="wf-inline">{['Full-time', 'Part-time', 'Contract', 'Internship'].map(type => <label className="nova-filter-pill" key={type}><input type="checkbox" checked={workTypes.includes(type)} onChange={e => setWorkTypes(e.target.checked ? [...workTypes, type] : workTypes.filter(t => t !== type))} /> {type}</label>)}</div></div>
+        <div className="wf-field"><span id="job-skill-label">Skills</span><details className="nova-skill-select"><summary aria-labelledby="job-skill-label job-skill-summary"><span id="job-skill-summary">{skill.length ? `${skill.length} skills selected` : 'All skills'}</span><span aria-hidden="true">⌄</span></summary><div className="nova-skill-options"><button type="button" className="text-button" onClick={() => setSkill([])}>Clear selected skills</button>{options.skills.map(value => <label key={value}><input type="checkbox" checked={skill.includes(value)} onChange={event => setSkill(current => event.target.checked ? [...current, value] : current.filter(item => item !== value))} />{value}</label>)}</div></details></div>
+        <div className="wf-field"><span>Experience</span><div className="wf-inline">{[['entry','Entry / intern'],['mid','Mid-level'],['senior','Senior / lead']].map(([value,label]) => <label className="nova-filter-pill" key={value}><input type="checkbox" checked={experience.split(',').includes(value)} onChange={e => setExperience(e.target.checked ? [...experience.split(',').filter(Boolean),value].join(',') : experience.split(',').filter(v => v !== value).join(','))} /> {label}</label>)}</div></div>
+        <div className="wf-field"><span>Location / Company</span><div className="wf-inline"><input placeholder="City or location" aria-label="Filter by location" value={location} onChange={e => setLocation(e.target.value)} list="location-options" /><datalist id="location-options">{options.locations.map(value => <option key={value} value={value} />)}</datalist><select aria-label="Filter by company" value={companyId} onChange={e => setCompanyId(e.target.value)}><option value="">All companies</option>{options.companies.map(c => <option key={c.company_id} value={c.company_id}>{c.name}</option>)}</select></div></div>
+      <footer className="nova-filter-footer"><span role="status" className={filterFeedback ? "nova-filter-success" : ""}>{filterFeedback || (loading ? "Applying your filters…" : "Choose your filters, then apply to update results.")}</span><div><button className="wf-secondary" onClick={clearFilters} disabled={loading}>Reset</button><button className="primary-button" onClick={applyFilters} disabled={loading}>{loading ? 'Applying…' : 'Apply Filters'}</button></div></footer>
       </section>
-      <h2>Results</h2>
       {msg && <div style={{ background: "#d1fae5", color: "#065f46", padding: "10px 16px", borderRadius: 8, marginBottom: 16 }}>{msg}</div>}
 
       {loading ? <Spinner /> : (
         <>
-          <p style={{ color: "#6b7280", fontSize: 14, marginBottom: 16 }}>{total} jobs found</p>
+          <div className="nova-results-heading"><div className="nova-results-title"><h2>Results</h2><p>{total} jobs found</p></div><label>Sort by <select value={sort} onChange={event => { setSort(event.target.value); load(0, false, event.target.value); }}><option value="match">Highest match</option><option value="newest">Newest posted</option></select></label></div>
           <div style={{ display: "grid", gap: 16 }}>
             {jobs.map(job => (
-              <div key={job.job_id} style={{ background: "#fff", borderRadius: 12, padding: 20, boxShadow: "0 1px 4px rgba(0,0,0,0.08)", border: "1px solid #e5e7eb" }}>
+              <article key={job.job_id} className="nova-modern-job">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "nowrap", gap: 12 }}>
+                  <CompanyLogo job={job} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>
                       <button type="button" className="text-button wf-job-title" onClick={() => goJob(job.job_id)}>{job.title}</button>
@@ -371,17 +447,23 @@ function JobListingsPage({ goJob }) {
                     <p style={{ margin: "4px 0 0", color: "#374151", fontSize: 14 }}>
                       {job.company_name} · {job.location}
                     </p>
-                    {job.skill_summary && <p style={{ margin: "8px 0 0", color: "#1e40af", fontSize: 12 }}>Required skills: {job.skill_summary.split(", ").slice(0, 5).join(" · ")}</p>}
+                    <div className="nova-card-match"><ResumeMatch job={job} /></div><MatchExplanation job={job} />
+                    {job.skill_summary && <div className="nova-job-skill-chips" aria-label="Required skills">{job.skill_summary.split(", ").slice(0, 5).map(skill => <span key={skill}>{skill}</span>)}</div>}
                   </div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                    {job.salary_range && <span style={tagStyle("#d1fae5", "#065f46")}>Salary: {job.salary_range}</span>}
+                    {job.salary_range && <span style={tagStyle("#d1fae5", "#065f46")}>Salary: {job.salary_range}</span>}<button type="button" className="wf-secondary nova-bookmark-button" aria-label={savedIds.includes(job.job_id) ? `Unsave ${job.title}` : `Save ${job.title}`} title={savedIds.includes(job.job_id) ? 'Remove from saved jobs' : 'Save job'} disabled={!savedReady || saving !== null} onClick={() => toggleSave(job)}><BookmarkIcon saved={savedIds.includes(job.job_id)} /></button>
                   </div>
                 </div>
-                <div style={{ marginTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-                  <span style={{ fontSize: 12, color: "#9ca3af" }}>Posted: {job.date_posted || "N/A"}</span>
+                <div className="nova-modern-job-footer">
+                  <span style={{ fontSize: 12, color: "#64748b" }}>Posted: {job.date_posted || "Not provided"}</span>
+                  <div className="nova-listing-actions" onClick={event => event.stopPropagation()}>
+                    {applicationStatuses[job.job_id] && <span className="nova-application-card-status" role="status">{applicationStatuses[job.job_id] === "Opened employer site" ? "Application page opened" : applicationStatuses[job.job_id]}</span>}
+                    {job.source_url && /^https?:\/\//i.test(job.source_url) && <a className="primary-button" href={job.source_url} target="_blank" rel="noopener noreferrer" onClick={() => trackOpening(job)}>Apply Now</a>}
+
+                  </div>
 
                 </div>
-              </div>
+              </article>
             ))}
           </div>
           {<div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, marginTop: 24 }}>

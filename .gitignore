@@ -16,3 +16,5 @@ coverage.xml
 .coverage
 backend/dev_account.py
 ops/com.novateck.jobsync.plist
+# Local frontend configuration
+frontend/.env.local

@@ -5,10 +5,29 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from job_sync import SyncSettings, format_salary, is_tech_job, lever_description, normalize_listing, parse_posted_date
+from job_sync import CompanySource, PublicCompanyFeeds, is_dfw, closing_date, SyncSettings, format_salary, is_tech_job, lever_description, normalize_listing, parse_posted_date
 
 
 class JobSyncNormalizationTests(unittest.TestCase):
+    def test_greenhouse_uses_posting_location_before_office_metadata(self):
+        source = CompanySource("Example", "Example", "example", "https://example.test", "greenhouse")
+        feed = PublicCompanyFeeds([source])
+        listing = {"title": "Software Engineer", "location": {"name": "Dallas, TX"},
+                   "offices": [{"location": "New York, NY"}], "absolute_url": "https://example.test/job"}
+        with patch.object(feed, "_get_json", return_value={"jobs": [listing]}):
+            jobs = list(feed.listings_for(source))
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(jobs[0]["location"], "Dallas, TX")
+        listing["location"]["name"] = "New York, NY"
+        listing["offices"][0]["location"] = "Dallas, TX"
+        with patch.object(feed, "_get_json", return_value={"jobs": [listing]}):
+            self.assertEqual(list(feed.listings_for(source)), [])
+
+    def test_deadlines_only_use_explicit_source_values(self):
+        self.assertEqual(closing_date({"validThrough": "2026-10-31T23:59:00Z"}), "2026-10-31")
+        self.assertIsNone(closing_date({"createdAt": "2026-03-01"}))
+        self.assertIsNone(closing_date({"closingDate": "invalid"}))
+
     def test_normalizes_a_provider_listing(self):
         job = normalize_listing({
             "redirect_url": "https://example.test/jobs/123",
@@ -40,9 +59,17 @@ class JobSyncNormalizationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 SyncSettings.from_environment(require_adzuna=True)
 
+    def test_dfw_includes_northern_suburbs_without_partial_city_matches(self):
+        self.assertTrue(is_dfw("Denton, Texas"))
+        self.assertTrue(is_dfw("Lewisville, TX"))
+        self.assertFalse(is_dfw("Allentown, PA"))
+        self.assertFalse(is_dfw("Garlandville, Mississippi"))
+
     def test_technology_role_policy_rejects_general_company_roles(self):
         self.assertTrue(is_tech_job("Senior Software Engineer"))
         self.assertTrue(is_tech_job("Data Analyst"))
+        self.assertTrue(is_tech_job("Manufacturing Engineer"))
+        self.assertTrue(is_tech_job("Production Software Engineer"))
         self.assertFalse(is_tech_job("Technician III, Production"))
         self.assertFalse(is_tech_job("Associate Inventory Administrator"))
 

@@ -29,7 +29,7 @@ load_dotenv(Path(__file__).with_name(".env"))
 LOG = logging.getLogger("novateck.job_sync")
 API_URL = "https://api.adzuna.com/v1/api/jobs/us/search/{page}"
 SOURCES_FILE = Path(__file__).with_name("crawler") / "company_sources.json"
-DFW_PLACES = ("dallas", "fort worth", "arlington", "plano", "irving", "frisco", "richardson", "addison", "carrollton", "mckinney", "allen", "garland", "grapevine", "southlake", "dfw")
+DFW_PLACES = ("dallas", "fort worth", "arlington", "plano", "irving", "frisco", "richardson", "addison", "carrollton", "mckinney", "allen", "garland", "grapevine", "southlake", "dfw", "denton", "lewisville", "coppell", "flower mound", "the colony", "euless", "bedford", "hurst", "keller", "mansfield", "burleson", "wylie", "prosper", "colleyville", "westlake", "roanoke")
 
 # Only include technology jobs.
 TECH_TITLE_TERMS = re.compile(
@@ -94,6 +94,15 @@ def parse_posted_date(value: Any) -> str | None:
         return None
 
 
+def closing_date(item: dict[str, Any]) -> str | None:
+    """Only use explicit source deadlines; never infer expiry from posting age."""
+    for key in ("validThrough", "closingDate", "closing_date", "applicationDeadline", "application_deadline"):
+        value = parse_posted_date(item.get(key))
+        if value:
+            return value
+    return None
+
+
 def format_salary(item: dict[str, Any]) -> str | None:
     low, high = item.get("salary_min"), item.get("salary_max")
     if low is None and high is None:
@@ -105,12 +114,13 @@ def format_salary(item: dict[str, Any]) -> str | None:
 
 
 def is_dfw(location: str) -> bool:
-    return any(place in location.lower() for place in DFW_PLACES)
+    return any(re.search(r"(?<![a-z])" + re.escape(place) + r"(?![a-z])", location.lower()) for place in DFW_PLACES)
 
 
 def is_tech_job(title: str) -> bool:
     """Is tech job."""
-    return bool(TECH_TITLE_TERMS.search(title)) and not bool(NON_TECH_TITLE_TERMS.search(title))
+    policy_title = re.sub(r"\b(?:manufacturing|production)\b", "", title, flags=re.IGNORECASE) if re.search(r"\b(?:engineer|engineering)\b", title, re.IGNORECASE) else title
+    return bool(TECH_TITLE_TERMS.search(title)) and not bool(NON_TECH_TITLE_TERMS.search(policy_title))
 
 
 def lever_description(item: dict[str, Any]) -> str:
@@ -134,7 +144,7 @@ def normalize_listing(item: dict[str, Any]) -> dict[str, Any] | None:
     location = clean_text((item.get("location") or {}).get("display_name"))
     return {"company_name": company[:255], "title": title[:255], "description": clean_text(item.get("description")),
             "location": location[:255] or None, "job_type": clean_text(item.get("contract_type")).replace("_", " ").title() or None,
-            "salary_range": format_salary(item), "source_url": source_url[:1000], "date_posted": parse_posted_date(item.get("created"))}
+            "salary_range": format_salary(item), "source_url": source_url[:1000], "date_posted": parse_posted_date(item.get("created")), "closing_date": closing_date(item)}
 
 
 @dataclass(frozen=True)
@@ -144,6 +154,7 @@ class CompanySource:
     board: str
     careers_url: str
     source_type: str
+    website_url: str | None = None
 
     @property
     def key(self) -> str:
@@ -207,21 +218,21 @@ class PublicCompanyFeeds:
                        "description": lever_description(item),
                        "location": location[:255], "job_type": clean_text((item.get("categories") or {}).get("commitment")) or None,
                        "salary_range": None, "source_url": str(item.get("hostedUrl") or "")[:1000],
-                       "date_posted": parse_posted_date(item.get("createdAt")), "_provider": source.key, "source_http_status": getattr(self, "source_http_status", None)}
+                       "date_posted": parse_posted_date(item.get("createdAt")), "closing_date": closing_date(item), "_provider": source.key, "source_http_status": getattr(self, "source_http_status", None)}
         elif source.source_type == "greenhouse":
             payload = self._get_json(f"https://boards-api.greenhouse.io/v1/boards/{source.board}/jobs?content=true")
             for item in payload.get("jobs", []):
-                locations = ", ".join(clean_text(o.get("location")) for o in item.get("offices", []) if o.get("location"))
-                # Use the job location if office details are missing.
+                locations = clean_text((item.get("location") or {}).get("name"))
+                # Office metadata can describe a different headquarters; prefer the job location.
                 if not locations:
-                    locations = clean_text((item.get("location") or {}).get("name"))
+                    locations = ", ".join(clean_text(o.get("location")) for o in item.get("offices", []) if o.get("location"))
                 title = clean_text(item.get("title"))
                 if not is_dfw(locations) or not is_tech_job(title):
                     continue
                 yield {"company_name": source.name, "title": title[:255],
                        "description": clean_text(item.get("content")), "location": locations[:255], "job_type": None,
                        "salary_range": None, "source_url": str(item.get("absolute_url") or "")[:1000],
-                       "date_posted": parse_posted_date(item.get("updated_at")), "_provider": source.key, "source_http_status": getattr(self, "source_http_status", None)}
+                       "date_posted": parse_posted_date(item.get("first_published")), "closing_date": closing_date(item), "_provider": source.key, "source_http_status": getattr(self, "source_http_status", None)}
         else:
             raise ValueError(f"Unsupported company source type: {source.source_type}")
 
@@ -284,9 +295,14 @@ def sync_jobs(settings: SyncSettings, dry_run: bool = False) -> dict[str, int]:
         feeds = PublicCompanyFeeds(load_company_sources())
         # Show companies even when they have no matching jobs.
         for source in feeds.sources:
-            db.insert_company(source.name, website_url=source.careers_url,
+            db.insert_company(source.name, website_url=source.website_url or source.careers_url,
                               location="Dallas-Fort Worth, TX", industry="Technology")
         for source in feeds.sources:
+            if source.website_url:
+                with db.get_connection() as conn:
+                    cur = conn.cursor()
+                    cur.execute("UPDATE Companies SET website_url=%s WHERE name=%s", (source.website_url, source.name))
+                    conn.commit()
             started_at = datetime.now()
             source_completed = False
             try:

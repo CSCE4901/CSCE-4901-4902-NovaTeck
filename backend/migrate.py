@@ -43,6 +43,11 @@ def main():
                     if not cur.fetchone():
                         cur.execute("ALTER TABLE Users ADD COLUMN resume_filename VARCHAR(255) NULL AFTER resume_url")
                     continue
+                if statement.upper().startswith("ALTER TABLE JOBS ADD COLUMN CLOSING_DATE"):
+                    cur.execute("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Jobs' AND COLUMN_NAME = 'closing_date'")
+                    if not cur.fetchone():
+                        cur.execute(statement)
+                    continue
                 if statement.upper().startswith("ALTER TABLE JOBS ADD COLUMN SOURCE_HTTP_STATUS"):
                     cur.execute("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Jobs' AND COLUMN_NAME = 'source_http_status'")
                     if not cur.fetchone():

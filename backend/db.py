@@ -140,7 +140,7 @@ def insert_job(company_id, title, source_url, description=None,
 
 
 def upsert_job(company_id, title, source_url, provider, description=None,
-               location=None, job_type=None, salary_range=None, date_posted=None, source_http_status=None):
+               location=None, job_type=None, salary_range=None, date_posted=None, source_http_status=None, closing_date=None):
     """Upsert job."""
     select_sql = """SELECT job_id, title, description, location, job_type,
                            salary_range, date_posted, is_active
@@ -163,7 +163,7 @@ def upsert_job(company_id, title, source_url, provider, description=None,
                                  salary_range, source_url, date_posted, provider)
                 cur.execute(insert_sql, insert_values)
                 job_id = cur.lastrowid
-                cur.execute("UPDATE Jobs SET source_http_status=%s WHERE job_id=%s", (source_http_status, job_id))
+                cur.execute("UPDATE Jobs SET source_http_status=%s, closing_date=%s WHERE job_id=%s", (source_http_status, closing_date, job_id))
                 conn.commit()
                 return job_id, True
             fields = ("title", "description", "location", "job_type", "salary_range", "date_posted")
@@ -173,7 +173,7 @@ def upsert_job(company_id, title, source_url, provider, description=None,
                 for field, value in zip(fields, comparable_values)
             ) or not existing["is_active"]
             cur.execute(update_sql, values + (provider, existing["job_id"]))
-            cur.execute("UPDATE Jobs SET source_http_status=%s WHERE job_id=%s", (source_http_status, existing["job_id"]))
+            cur.execute("UPDATE Jobs SET source_http_status=%s, closing_date=%s WHERE job_id=%s", (source_http_status, closing_date, existing["job_id"]))
             conn.commit()
             return existing["job_id"], changed
     except Error as e:
@@ -300,15 +300,21 @@ def get_latest_sync_run():
 
 def _job_filters(skill=None, location=None, company_id=None, experience=None, discipline=None, is_active=True, q=None, work_type=None):
     """Build parameterized conditions shared by job search and pagination."""
-    conditions = ["j.is_active = %s"]
+    conditions = ["j.is_active = %s", "(j.closing_date IS NULL OR j.closing_date >= CURDATE())", "(j.date_posted IS NULL OR j.date_posted >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH))"]
     params = [is_active]
     if work_type:
         requested = [value.strip().lower() for value in work_type.split(',') if value.strip()]
         allowed = {'full-time': ['full-time', 'full time', 'full_time', 'full time employee'], 'part-time': ['part-time', 'part time', 'part_time', 'part time employee'], 'contract': ['contract', 'contractor']}
         values = [variant for value in requested for variant in allowed.get(value, [])]
+        work_conditions = []
         if values:
-            conditions.append("LOWER(j.job_type) IN (" + ",".join(["%s"] * len(values)) + ")")
+            work_conditions.append("LOWER(j.job_type) IN (" + ",".join(["%s"] * len(values)) + ")")
             params.extend(values)
+        if 'internship' in requested:
+            work_conditions.append("(LOWER(j.job_type) REGEXP %s OR LOWER(j.title) REGEXP %s)")
+            params.extend([r'(intern|internship)', r'(^|[^a-z])intern(ship)?([^a-z]|$)'])
+        if work_conditions:
+            conditions.append('(' + ' OR '.join(work_conditions) + ')')
     if q:
         conditions.append("(j.title LIKE %s OR j.description LIKE %s)")
         params.extend([f"%{q}%", f"%{q}%"])
@@ -319,14 +325,15 @@ def _job_filters(skill=None, location=None, company_id=None, experience=None, di
         conditions.append("j.company_id = %s")
         params.append(company_id)
     if skill:
-        conditions.append("""
-            j.job_id IN (
-                SELECT js.job_id FROM Job_Skills js
-                JOIN Skills s ON js.skill_id = s.skill_id
-                WHERE s.skill_name LIKE %s
-            )
-        """)
-        params.append(f"%{skill}%")
+        if isinstance(skill, list):
+            values = list(dict.fromkeys(value.strip().lower() for value in skill if value.strip()))[:100]
+            if values:
+                placeholders = ','.join(['%s'] * len(values))
+                conditions.append(f'j.job_id IN (SELECT js.job_id FROM Job_Skills js JOIN Skills s ON js.skill_id = s.skill_id WHERE LOWER(s.skill_name) IN ({placeholders}))')
+                params.extend(values)
+        else:
+            conditions.append('j.job_id IN (SELECT js.job_id FROM Job_Skills js JOIN Skills s ON js.skill_id = s.skill_id WHERE s.skill_name LIKE %s)')
+            params.append(f'%{skill}%')
     experience_patterns = {
         "entry": r"(intern|junior|entry|associate|new grad)",
         "mid": r"(engineer|developer|analyst|designer)",
@@ -336,27 +343,33 @@ def _job_filters(skill=None, location=None, company_id=None, experience=None, di
     if patterns:
         conditions.append("LOWER(j.title) REGEXP %s")
         params.append("|".join(patterns))
-    if discipline in DISCIPLINE_PATTERNS:
-        conditions.append("LOWER(j.title) REGEXP %s")
-        params.append(DISCIPLINE_PATTERNS[discipline])
+    disciplines = discipline if isinstance(discipline, list) else [discipline]
+    patterns = [DISCIPLINE_PATTERNS[value] for value in dict.fromkeys(disciplines) if value in DISCIPLINE_PATTERNS]
+    if patterns:
+        conditions.append('(' + ' OR '.join(['LOWER(j.title) REGEXP %s'] * len(patterns)) + ')')
+        params.extend(patterns)
     return " AND ".join(conditions), params
 
 
-def get_jobs(skill=None, location=None, company_id=None, experience=None, discipline=None, is_active=True, limit=50, offset=0, q=None, work_type=None):
+def get_jobs(skill=None, location=None, company_id=None, experience=None, discipline=None, is_active=True, limit=50, offset=0, q=None, work_type=None, exclude_applications_user_id=None):
     where, params = _job_filters(skill, location, company_id, experience, discipline, is_active, q=q, work_type=work_type)
+    if exclude_applications_user_id is not None:
+        where += ' AND NOT EXISTS (SELECT 1 FROM Application_Activity activity WHERE activity.job_id = j.job_id AND activity.user_id = %s)'
+        params.append(exclude_applications_user_id)
 
     sql = f"""
-        SELECT j.*, c.name AS company_name,
+        SELECT j.*, c.name AS company_name, c.website_url AS company_website,
                (SELECT GROUP_CONCAT(s.skill_name ORDER BY s.skill_name SEPARATOR ', ')
                 FROM Job_Skills js JOIN Skills s ON js.skill_id = s.skill_id
                 WHERE js.job_id = j.job_id AND js.requirement_type = 'required') AS skill_summary
         FROM Jobs j
         JOIN Companies c ON j.company_id = c.company_id
         WHERE {where}
-        ORDER BY j.date_posted DESC
-        LIMIT %s OFFSET %s
+        ORDER BY j.date_posted DESC, j.job_id DESC
     """
-    params.extend([limit, offset])
+    if limit is not None:
+        sql += " LIMIT %s OFFSET %s"
+        params.extend([limit, offset])
 
     try:
         with get_connection() as conn:
@@ -368,9 +381,12 @@ def get_jobs(skill=None, location=None, company_id=None, experience=None, discip
         return []
 
 
-def get_job_count(skill=None, location=None, company_id=None, experience=None, discipline=None, is_active=True, q=None, work_type=None):
+def get_job_count(skill=None, location=None, company_id=None, experience=None, discipline=None, is_active=True, q=None, work_type=None, exclude_applications_user_id=None):
     """Return the total matching jobs so the UI can paginate honestly."""
     where, params = _job_filters(skill, location, company_id, experience, discipline, is_active, q=q, work_type=work_type)
+    if exclude_applications_user_id is not None:
+        where += ' AND NOT EXISTS (SELECT 1 FROM Application_Activity activity WHERE activity.job_id = j.job_id AND activity.user_id = %s)'
+        params.append(exclude_applications_user_id)
     try:
         with get_connection() as conn:
             cur = conn.cursor()
@@ -410,7 +426,7 @@ def get_search_options():
 
 def get_job_by_id(job_id):
     job_sql = """
-        SELECT j.*, c.name AS company_name, c.industry AS company_industry
+        SELECT j.*, c.name AS company_name, c.website_url AS company_website, c.industry AS company_industry
         FROM Jobs j
         JOIN Companies c ON j.company_id = c.company_id
         WHERE j.job_id = %s
@@ -724,7 +740,7 @@ def remove_saved_job(user_id, job_id):
 
 def get_saved_jobs(user_id):
     sql = """
-        SELECT j.*, c.name AS company_name, sj.saved_at
+        SELECT j.*, c.name AS company_name, c.website_url AS company_website, sj.saved_at
         FROM Saved_Jobs sj
         JOIN Jobs j ON sj.job_id = j.job_id
         JOIN Companies c ON j.company_id = c.company_id
@@ -786,7 +802,7 @@ def get_student_skill_gap_summary(user_id, discipline=None):
 
     user_set = {s.strip().lower() for s in user_skills}
 
-    conditions = ["j.is_active = TRUE", "js.requirement_type = 'required'"]
+    conditions = ["j.is_active = TRUE", "js.requirement_type = 'required'", "(j.date_posted IS NULL OR j.date_posted >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH))", "(j.closing_date IS NULL OR j.closing_date >= CURDATE())"]
     params = []
     if discipline in DISCIPLINE_PATTERNS:
         conditions.append("LOWER(j.title) REGEXP %s")
@@ -898,20 +914,26 @@ def review_flagged_skill(flag_id, admin_id, approve):
             raise
 
 
-def get_recommendations(user_id):
+def get_recommendations(user_id, discipline=None):
     """Get recommendations."""
+    focus_filter = ' AND LOWER(j.title) REGEXP %s' if discipline in DISCIPLINE_PATTERNS else ''
+    args = (user_id, user_id, user_id, user_id, DISCIPLINE_PATTERNS[discipline]) if focus_filter else (user_id, user_id, user_id, user_id)
     with get_connection() as conn:
         cur = conn.cursor(dictionary=True)
-        cur.execute("""SELECT j.job_id, j.title, c.name AS company_name, j.location,
+        cur.execute(f"""SELECT j.job_id, j.title, c.name AS company_name, c.website_url AS company_website, j.location,
                     COUNT(DISTINCT us.skill_id) AS matching_skills,
                     ROUND(100 * COUNT(DISTINCT us.skill_id) / COUNT(DISTINCT js.skill_id)) AS match_pct
                 FROM Jobs j JOIN Companies c ON c.company_id = j.company_id
                 JOIN Job_Skills js ON js.job_id = j.job_id AND js.requirement_type = 'required'
                 LEFT JOIN User_Skills us ON us.skill_id = js.skill_id AND us.user_id = %s
-                WHERE j.is_active = 1
-                GROUP BY j.job_id, j.title, c.name, j.location
+                WHERE j.is_active = 1 AND (j.closing_date IS NULL OR j.closing_date >= CURDATE())
+                  AND (j.date_posted IS NULL OR j.date_posted >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH))
+                  AND NOT EXISTS (SELECT 1 FROM Saved_Jobs saved WHERE saved.job_id = j.job_id AND saved.user_id = %s)
+                  AND NOT EXISTS (SELECT 1 FROM Hidden_Jobs hidden WHERE hidden.job_id = j.job_id AND hidden.user_id = %s)
+                  AND NOT EXISTS (SELECT 1 FROM Application_Activity activity WHERE activity.job_id = j.job_id AND activity.user_id = %s){focus_filter}
+                GROUP BY j.job_id, j.title, c.name, c.website_url, j.location
                 HAVING matching_skills > 0
-                ORDER BY match_pct DESC, matching_skills DESC, j.job_id DESC LIMIT 5""", (user_id,))
+                ORDER BY match_pct DESC, matching_skills DESC, j.job_id DESC LIMIT 5""", args)
         return cur.fetchall()
 
 
@@ -954,8 +976,8 @@ def get_application_activity(user_id):
     """List only application activity recorded by the user, newest first."""
     with get_connection() as conn:
         cur = conn.cursor(dictionary=True)
-        cur.execute('''SELECT a.job_id, a.status, a.updated_at, j.title, c.name AS company_name
-            FROM Application_Activity a JOIN Jobs j ON j.job_id = a.job_id
+        cur.execute('''SELECT a.job_id, a.status, a.updated_at, n.notes, n.interview_date, j.title, c.name AS company_name, c.website_url AS company_website
+            FROM Application_Activity a LEFT JOIN Application_Notes n ON n.user_id = a.user_id AND n.job_id = a.job_id JOIN Jobs j ON j.job_id = a.job_id
             JOIN Companies c ON c.company_id = j.company_id WHERE a.user_id = %s
             ORDER BY a.updated_at DESC''', (user_id,))
         return cur.fetchall()
@@ -1038,3 +1060,131 @@ def get_saved_resume(user_id, include_content=False):
         if row:
             row['skills'] = json.loads(row.pop('detected_skills'))
         return row
+
+
+def add_resume_matches(user_id, jobs):
+    """Compare required skills with saved resume skills, falling back to the profile."""
+    if not jobs:
+        return jobs
+    resume = get_saved_resume(user_id)
+    source = 'resume' if resume else 'profile'
+    saved_skills = resume.get('skills', []) if resume else get_user_skills(user_id)
+    if not resume and not saved_skills:
+        user = get_user_by_id(user_id)
+        saved_skills = (user.get('skills') or '').split(',') if user else []
+    skills = {str(skill).strip().lower() for skill in saved_skills if str(skill).strip()}
+    ids = list(dict.fromkeys(job['job_id'] for job in jobs))
+    required = {job_id: set() for job_id in ids}
+    with get_connection() as conn:
+        cur = conn.cursor(dictionary=True)
+        placeholders = ','.join(['%s'] * len(ids))
+        cur.execute(f'''SELECT js.job_id, s.skill_name FROM Job_Skills js
+            JOIN Skills s ON s.skill_id = js.skill_id
+            WHERE js.requirement_type = 'required' AND js.job_id IN ({placeholders})''', ids)
+        for row in cur.fetchall():
+            required[row['job_id']].add(row['skill_name'].strip().lower())
+    result = []
+    for job in jobs:
+        total = len(required[job['job_id']])
+        matched = len(required[job['job_id']] & skills)
+        result.append({**job, 'resume_match_pct': round(100 * matched / total) if total else None,
+                       'resume_match_status': 'ready' if total else 'no_requirements',
+                       'resume_match_source': source,
+                       'resume_matched_count': matched, 'resume_required_count': total,
+                       'resume_matched_skills': sorted(required[job['job_id']] & skills),
+                       'resume_missing_skills': sorted(required[job['job_id']] - skills)})
+    return result
+
+
+def create_support_request(user_id, subject, message):
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute('INSERT INTO Support_Requests (user_id, subject, message) VALUES (%s, %s, %s)', (user_id, subject, message))
+        support_id = cur.lastrowid
+        conn.commit()
+        return support_id
+
+
+def get_support_requests():
+    with get_connection() as conn:
+        cur = conn.cursor(dictionary=True)
+        cur.execute('SELECT s.*, u.name, u.email FROM Support_Requests s JOIN Users u ON u.user_id = s.user_id ORDER BY s.created_at DESC LIMIT 200')
+        return cur.fetchall()
+
+
+def update_support_request(support_id, status):
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute('SELECT support_id FROM Support_Requests WHERE support_id = %s', (support_id,))
+        if not cur.fetchone():
+            return False
+        cur.execute('UPDATE Support_Requests SET status = %s WHERE support_id = %s', (status, support_id))
+        conn.commit()
+        return True
+
+
+def support_threads(user_id=None):
+    with get_connection() as conn:
+        cur = conn.cursor(dictionary=True)
+        where = 'WHERE s.user_id = %s' if user_id is not None else ''
+        cur.execute(f'SELECT s.*, u.name, u.email FROM Support_Requests s JOIN Users u ON u.user_id = s.user_id {where} ORDER BY s.created_at DESC LIMIT 200', (user_id,) if user_id is not None else ())
+        rows = cur.fetchall()
+        if not rows:
+            return rows
+        ids = [row['support_id'] for row in rows]
+        placeholders = ','.join(['%s'] * len(ids))
+        cur.execute(f'SELECT r.reply_id, r.support_id, r.message, r.created_at, u.name AS admin_name FROM Support_Replies r JOIN Users u ON u.user_id = r.admin_id WHERE r.support_id IN ({placeholders}) ORDER BY r.reply_id', tuple(ids))
+        replies = cur.fetchall()
+        for row in rows:
+            row['replies'] = [reply for reply in replies if reply['support_id'] == row['support_id']]
+        return rows
+
+
+def reply_to_support(support_id, admin_id, message):
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute('SELECT support_id FROM Support_Requests WHERE support_id = %s', (support_id,))
+        if not cur.fetchone():
+            return False
+        cur.execute('INSERT INTO Support_Replies (support_id, admin_id, message) VALUES (%s, %s, %s)', (support_id, admin_id, message))
+        conn.commit()
+        return True
+
+
+def dismiss_resume_skill(user_id, flag_id):
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("UPDATE Unmatched_Skills SET status = 'rejected', reviewed_by = %s, reviewed_at = CURRENT_TIMESTAMP WHERE unmatched_id = %s AND user_id = %s AND status = 'pending'", (user_id, flag_id, user_id))
+        changed = cur.rowcount > 0
+        conn.commit()
+        return changed
+
+
+def save_application_notes(user_id, job_id, notes, interview_date):
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute('SELECT 1 FROM Application_Activity WHERE user_id = %s AND job_id = %s', (user_id, job_id))
+        if not cur.fetchone():
+            return False
+        cur.execute('INSERT INTO Application_Notes (user_id, job_id, notes, interview_date) VALUES (%s,%s,%s,%s) ON DUPLICATE KEY UPDATE notes=VALUES(notes), interview_date=VALUES(interview_date)', (user_id, job_id, notes, interview_date))
+        conn.commit()
+        return True
+
+
+def set_hidden_job(user_id, job_id, hidden):
+    with get_connection() as conn:
+        cur = conn.cursor()
+        if hidden:
+            cur.execute('INSERT IGNORE INTO Hidden_Jobs (user_id, job_id) VALUES (%s,%s)', (user_id, job_id))
+        else:
+            cur.execute('DELETE FROM Hidden_Jobs WHERE user_id = %s AND job_id = %s', (user_id, job_id))
+        conn.commit()
+
+
+def restore_hidden_jobs(user_id):
+    with get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute('DELETE FROM Hidden_Jobs WHERE user_id = %s', (user_id,))
+        count = cur.rowcount
+        conn.commit()
+        return count

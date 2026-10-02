@@ -1,11 +1,322 @@
 [
-  {"name": "TXSE", "provider": "TXSE", "board": "txse", "careers_url": "https://jobs.lever.co/txse", "source_type": "lever"},
-  {"name": "Shield AI", "provider": "Shield AI", "board": "shieldai", "careers_url": "https://jobs.lever.co/shieldai", "source_type": "lever"},
-  {"name": "City IT", "provider": "City IT", "board": "cef", "careers_url": "https://jobs.lever.co/cef", "source_type": "lever"},
-  {"name": "Long View Systems", "provider": "Long View Systems", "board": "lvs1", "careers_url": "https://jobs.lever.co/lvs1", "source_type": "lever"},
-  {"name": "Point B", "provider": "Point B", "board": "pointb", "careers_url": "https://jobs.lever.co/pointb", "source_type": "lever"},
-  {"name": "Dude Perfect", "provider": "Dude Perfect", "board": "dudeperfect", "careers_url": "https://job-boards.greenhouse.io/dudeperfect", "source_type": "greenhouse"},
-  {"name": "Galaxy", "provider": "Galaxy", "board": "galaxydigitalservices", "careers_url": "https://job-boards.greenhouse.io/galaxydigitalservices", "source_type": "greenhouse"},
-  {"name": "Blockchain.com", "provider": "Blockchain.com", "board": "blockchain", "careers_url": "https://job-boards.greenhouse.io/blockchain", "source_type": "greenhouse"},
-  {"name": "Uber Freight", "provider": "Uber Freight", "board": "uberfreight", "careers_url": "https://job-boards.greenhouse.io/uberfreight", "source_type": "greenhouse"}
+  {
+    "name": "TXSE",
+    "provider": "TXSE",
+    "board": "txse",
+    "careers_url": "https://jobs.lever.co/txse",
+    "source_type": "lever",
+    "website_url": "https://txse.com"
+  },
+  {
+    "name": "Shield AI",
+    "provider": "Shield AI",
+    "board": "shieldai",
+    "careers_url": "https://jobs.lever.co/shieldai",
+    "source_type": "lever",
+    "website_url": "https://shield.ai"
+  },
+  {
+    "name": "City IT",
+    "provider": "City IT",
+    "board": "cef",
+    "careers_url": "https://jobs.lever.co/cef",
+    "source_type": "lever",
+    "website_url": "https://citytech.careers"
+  },
+  {
+    "name": "Long View Systems",
+    "provider": "Long View Systems",
+    "board": "lvs1",
+    "careers_url": "https://jobs.lever.co/lvs1",
+    "source_type": "lever",
+    "website_url": "https://longviewsystems.com"
+  },
+  {
+    "name": "Point B",
+    "provider": "Point B",
+    "board": "pointb",
+    "careers_url": "https://jobs.lever.co/pointb",
+    "source_type": "lever",
+    "website_url": "https://pointb.com"
+  },
+  {
+    "name": "Dude Perfect",
+    "provider": "Dude Perfect",
+    "board": "dudeperfect",
+    "careers_url": "https://job-boards.greenhouse.io/dudeperfect",
+    "source_type": "greenhouse",
+    "website_url": "https://dudeperfect.com"
+  },
+  {
+    "name": "Galaxy",
+    "provider": "Galaxy",
+    "board": "galaxydigitalservices",
+    "careers_url": "https://job-boards.greenhouse.io/galaxydigitalservices",
+    "source_type": "greenhouse",
+    "website_url": "https://galaxy.com"
+  },
+  {
+    "name": "Blockchain.com",
+    "provider": "Blockchain.com",
+    "board": "blockchain",
+    "careers_url": "https://job-boards.greenhouse.io/blockchain",
+    "source_type": "greenhouse",
+    "website_url": "https://blockchain.com"
+  },
+  {
+    "name": "Uber Freight",
+    "provider": "Uber Freight",
+    "board": "uberfreight",
+    "careers_url": "https://job-boards.greenhouse.io/uberfreight",
+    "source_type": "greenhouse",
+    "website_url": "https://uberfreight.com"
+  },
+  {
+    "name": "ISEE",
+    "provider": "ISEE",
+    "board": "isee",
+    "careers_url": "https://jobs.lever.co/isee",
+    "source_type": "lever",
+    "website_url": "https://isee.ai"
+  },
+  {
+    "name": "Topaz Labs",
+    "provider": "Topaz Labs",
+    "board": "topazlabs",
+    "careers_url": "https://jobs.lever.co/topazlabs",
+    "source_type": "lever",
+    "website_url": "https://topazlabs.com"
+  },
+  {
+    "name": "Kunai",
+    "provider": "Kunai",
+    "board": "kunai",
+    "careers_url": "https://job-boards.greenhouse.io/kunai",
+    "source_type": "greenhouse",
+    "website_url": "https://kunaico.com"
+  },
+  {
+    "name": "Further",
+    "provider": "Further",
+    "board": "further",
+    "careers_url": "https://job-boards.greenhouse.io/further",
+    "source_type": "greenhouse",
+    "website_url": "https://further.ai"
+  },
+  {
+    "name": "Lantern Health",
+    "provider": "Lantern Health",
+    "board": "employerdirecthealthcare",
+    "careers_url": "https://job-boards.greenhouse.io/employerdirecthealthcare",
+    "source_type": "greenhouse",
+    "website_url": "https://lanterncare.com"
+  },
+  {
+    "name": "Lantern Studios",
+    "provider": "Lantern Studios",
+    "board": "lanternstudiosinc",
+    "careers_url": "https://job-boards.greenhouse.io/lanternstudiosinc",
+    "source_type": "greenhouse",
+    "website_url": "https://lanternstudios.com"
+  },
+  {
+    "name": "Match Group",
+    "provider": "Match Group",
+    "board": "matchgroup",
+    "careers_url": "https://jobs.lever.co/matchgroup",
+    "source_type": "lever",
+    "website_url": "https://mtch.com"
+  },
+  {
+    "name": "Berkshire Hathaway Homestate Companies",
+    "provider": "Berkshire Hathaway Homestate Companies",
+    "board": "bhhc",
+    "careers_url": "https://jobs.lever.co/bhhc",
+    "source_type": "lever",
+    "website_url": "https://bhhc.com"
+  },
+  {
+    "name": "Accordion",
+    "provider": "Accordion",
+    "board": "accordion",
+    "careers_url": "https://job-boards.greenhouse.io/accordion",
+    "source_type": "greenhouse",
+    "website_url": "https://accordion.com"
+  },
+  {
+    "name": "Torq",
+    "provider": "Torq",
+    "board": "gotorq",
+    "careers_url": "https://job-boards.greenhouse.io/gotorq",
+    "source_type": "greenhouse",
+    "website_url": "https://gotorq.com"
+  },
+  {
+    "name": "Hop",
+    "provider": "Hop",
+    "board": "hophr",
+    "careers_url": "https://jobs.lever.co/hophr",
+    "source_type": "lever",
+    "website_url": null
+  },
+  {
+    "name": "AHEAD",
+    "provider": "AHEAD",
+    "board": "thinkahead",
+    "careers_url": "https://jobs.lever.co/thinkahead",
+    "source_type": "lever",
+    "website_url": "https://ahead.com"
+  },
+  {
+    "name": "Waabi",
+    "provider": "Waabi",
+    "board": "waabi",
+    "careers_url": "https://jobs.lever.co/waabi",
+    "source_type": "lever",
+    "website_url": "https://waabi.ai"
+  },
+  {
+    "name": "Emburse",
+    "provider": "Emburse",
+    "board": "emburse",
+    "careers_url": "https://jobs.lever.co/emburse",
+    "source_type": "lever",
+    "website_url": "https://emburse.com"
+  },
+  {
+    "name": "Bellwether",
+    "provider": "Bellwether",
+    "board": "bellwetheram-2",
+    "careers_url": "https://jobs.lever.co/bellwetheram-2",
+    "source_type": "lever",
+    "website_url": "https://bellwetheram.com"
+  },
+  {
+    "name": "CoreWeave",
+    "provider": "CoreWeave",
+    "board": "coreweave",
+    "careers_url": "https://job-boards.greenhouse.io/coreweave",
+    "source_type": "greenhouse",
+    "website_url": "https://coreweave.com"
+  },
+  {
+    "name": "Databricks",
+    "provider": "Databricks",
+    "board": "databricks",
+    "careers_url": "https://job-boards.greenhouse.io/databricks",
+    "source_type": "greenhouse",
+    "website_url": "https://databricks.com"
+  },
+  {
+    "name": "Samsara",
+    "provider": "Samsara",
+    "board": "samsara",
+    "careers_url": "https://job-boards.greenhouse.io/samsara",
+    "source_type": "greenhouse",
+    "website_url": "https://samsara.com"
+  },
+  {
+    "name": "Zscaler",
+    "provider": "Zscaler",
+    "board": "zscaler",
+    "careers_url": "https://job-boards.greenhouse.io/zscaler",
+    "source_type": "greenhouse",
+    "website_url": "https://zscaler.com"
+  },
+  {
+    "name": "Anduril",
+    "provider": "Anduril",
+    "board": "andurilindustries",
+    "careers_url": "https://job-boards.greenhouse.io/andurilindustries",
+    "source_type": "greenhouse",
+    "website_url": "https://anduril.com"
+  },
+  {
+    "name": "Capco",
+    "provider": "Capco",
+    "board": "capco",
+    "careers_url": "https://job-boards.greenhouse.io/capco",
+    "source_type": "greenhouse",
+    "website_url": "https://capco.com"
+  },
+  {
+    "name": "Tanium",
+    "provider": "Tanium",
+    "board": "tanium",
+    "careers_url": "https://job-boards.greenhouse.io/tanium",
+    "source_type": "greenhouse",
+    "website_url": "https://tanium.com"
+  },
+  {
+    "name": "MongoDB",
+    "provider": "MongoDB",
+    "board": "mongodb",
+    "careers_url": "https://job-boards.greenhouse.io/mongodb",
+    "source_type": "greenhouse",
+    "website_url": "https://mongodb.com"
+  },
+  {
+    "name": "Elastic",
+    "provider": "Elastic",
+    "board": "elastic",
+    "careers_url": "https://job-boards.greenhouse.io/elastic",
+    "source_type": "greenhouse",
+    "website_url": "https://elastic.co"
+  },
+  {
+    "name": "Meriton",
+    "provider": "Meriton",
+    "board": "meriton",
+    "careers_url": "https://job-boards.greenhouse.io/meriton",
+    "source_type": "greenhouse",
+    "website_url": "https://meriton.com"
+  },
+  {
+    "name": "itD",
+    "provider": "itD",
+    "board": "itd",
+    "careers_url": "https://job-boards.greenhouse.io/itd",
+    "source_type": "greenhouse",
+    "website_url": "https://itdtech.com"
+  },
+  {
+    "name": "NICE",
+    "provider": "NICE",
+    "board": "nice",
+    "careers_url": "https://job-boards.greenhouse.io/nice",
+    "source_type": "greenhouse",
+    "website_url": "https://nice.com"
+  },
+  {
+    "name": "Texas AirSystems",
+    "provider": "Texas AirSystems",
+    "board": "texasairsystems",
+    "careers_url": "https://job-boards.greenhouse.io/texasairsystems",
+    "source_type": "greenhouse",
+    "website_url": "https://texasairsystems.com"
+  },
+  {
+    "name": "Greenpoint Technologies",
+    "provider": "Greenpoint Technologies",
+    "board": "greenpointtechnologies",
+    "careers_url": "https://job-boards.greenhouse.io/greenpointtechnologies",
+    "source_type": "greenhouse",
+    "website_url": "https://greenpoint.com"
+  },
+  {
+    "name": "Moonshot",
+    "provider": "Moonshot",
+    "board": "moonshot",
+    "careers_url": "https://job-boards.greenhouse.io/moonshot",
+    "source_type": "greenhouse",
+    "website_url": "https://moonshotus.com"
+  },
+  {
+    "name": "US Conec",
+    "provider": "US Conec",
+    "board": "usconec",
+    "careers_url": "https://job-boards.greenhouse.io/usconec",
+    "source_type": "greenhouse",
+    "website_url": "https://usconec.com"
+  }
 ]

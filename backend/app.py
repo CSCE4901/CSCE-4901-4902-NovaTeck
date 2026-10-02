@@ -202,11 +202,13 @@ def request_password_reset():
     email = (request.get_json() or {}).get("email", "").strip().lower()
     if not EMAIL_PATTERN.fullmatch(email):
         return jsonify({"error": "Enter a valid email address"}), 400
+    if not os.environ.get('SMTP_HOST') or not os.environ.get('SMTP_FROM'):
+        return jsonify({'error': 'Password reset email is not available yet. Please contact support.'}), 503
     user = db.get_user_by_email(email)
     if user:
         token = secrets.token_urlsafe(32)
-        if db.create_password_reset_token(user["user_id"], token):
-            deliver_password_reset(email, token)
+        if not db.create_password_reset_token(user["user_id"], token) or not deliver_password_reset(email, token):
+            return jsonify({'error': 'Could not send the reset email. Please try again later or contact support.'}), 503
     return jsonify({"message": "If the email exists, a password-reset link has been sent."}), 200
 
 
@@ -227,11 +229,11 @@ def confirm_password_reset():
 @app.route("/api/jobs", methods=["GET"])
 @token_required
 def get_jobs():
-    skill      = request.args.get("skill")
+    skill      = request.args.getlist("skill")
     location   = request.args.get("location")
     company_id = request.args.get("company_id", type=int)
     experience = request.args.get("experience", type=str)
-    discipline = request.args.get("discipline", type=str)
+    discipline = request.args.getlist("discipline")
     limit      = request.args.get("limit", 200, type=int)
     offset     = request.args.get("offset", 0, type=int)
     limit = max(1, min(limit or 200, 500))
@@ -243,11 +245,16 @@ def get_jobs():
         company_id=company_id,
         experience=experience,
         discipline=discipline,
-        limit=limit,
+        limit=None if request.args.get("sort") == "match" else limit,
         offset=offset,
         q=request.args.get("q"),
         work_type=request.args.get("work_type"),
+        exclude_applications_user_id=request.user_id,
     )
+    jobs = db.add_resume_matches(request.user_id, jobs)
+    if request.args.get('sort') == 'match':
+        jobs.sort(key=lambda job: job.get('resume_match_pct') if isinstance(job.get('resume_match_pct'), (int, float)) else -1, reverse=True)
+        jobs = jobs[offset:offset + limit]
     return jsonify_safe(jobs)
 
 
@@ -258,11 +265,12 @@ def get_job_count():
     return jsonify({"total": db.get_job_count(
         q=request.args.get("q"),
         work_type=request.args.get("work_type"),
-        skill=request.args.get("skill"),
+        exclude_applications_user_id=request.user_id,
+        skill=request.args.getlist("skill"),
         location=request.args.get("location"),
         company_id=request.args.get("company_id", type=int),
         experience=request.args.get("experience", type=str),
-        discipline=request.args.get("discipline", type=str),
+        discipline=request.args.getlist("discipline"),
     )})
 
 
@@ -310,7 +318,7 @@ def get_saved_jobs(user_id):
     if request.user_id != user_id:
         return jsonify({"error": "Unauthorized"}), 403
     jobs = db.get_saved_jobs(user_id)
-    return jsonify_safe(jobs)
+    return jsonify_safe(db.add_resume_matches(request.user_id, jobs))
 
 
 # STUDENT PROFILE & SKILLS
@@ -384,6 +392,27 @@ def saved_resume_file():
     return response
 
 
+@app.route("/api/resume/saved/preview", methods=["GET"])
+@token_required
+def saved_resume_preview():
+    resume = db.get_saved_resume(request.user_id, include_content=True)
+    if not resume:
+        return jsonify({"error": "No saved resume found"}), 404
+    if not resume['filename'].lower().endswith('.docx'):
+        return jsonify({"error": "Text preview supports DOCX resumes"}), 400
+    try:
+        from docx import Document
+        document = Document(BytesIO(resume['content']))
+        paragraphs = [paragraph.text for paragraph in document.paragraphs]
+        for table in document.tables:
+            paragraphs.extend(' | '.join(cell.text for cell in row.cells) for row in table.rows)
+        response = jsonify({"text": '\n'.join(paragraphs)})
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    except Exception:
+        return jsonify({"error": "Could not preview this resume"}), 422
+
+
 @app.route("/api/resume/saved/scan", methods=["POST"])
 @token_required
 def rescan_saved_resume():
@@ -417,6 +446,14 @@ def add_detected_skill(flag_id):
     if not db.add_resume_skill_to_profile(request.user_id, flag_id):
         return jsonify({"error": "Detected skill not found for your account"}), 404
     return jsonify({"message": "Skill added to your profile"})
+
+
+@app.route('/api/resume/skills/<int:flag_id>', methods=['DELETE'])
+@token_required
+def dismiss_detected_skill(flag_id):
+    if not db.dismiss_resume_skill(request.user_id, flag_id):
+        return jsonify({'error': 'Pending skill not found for your account.'}), 404
+    return jsonify({'message': 'Flagged skill dismissed.'})
 
 
 @app.route("/api/admin/flagged-skills")
@@ -504,7 +541,7 @@ def recommendations(user_id):
     """Return active jobs ranked by the student's verified catalog skills."""
     if request.user_id != user_id:
         return jsonify({"error": "Unauthorized"}), 403
-    return jsonify_safe(db.get_recommendations(user_id))
+    return jsonify_safe(db.add_resume_matches(user_id, db.get_recommendations(user_id, db.get_profile_details(user_id).get('career_focus'))))
 
 
 @app.route("/api/market-trends")
@@ -545,7 +582,7 @@ def application_activity(user_id):
     if request.user_id != user_id:
         return jsonify({"error": "Unauthorized"}), 403
     if request.method == "GET":
-        return jsonify_safe(db.get_application_activity(user_id))
+        return jsonify_safe(db.add_resume_matches(user_id, db.get_application_activity(user_id)))
     data = request.get_json() or {}
     job_id, status = data.get("job_id"), data.get("status", "Opened employer site")
     if not isinstance(job_id, int) or status not in ['Opened employer site', 'Applied', 'Interviewing', 'Offer', 'Closed']:
@@ -612,6 +649,105 @@ def api_error(error):
         return jsonify({"error": error.description}), error.code
     app.logger.exception("Request failed")
     return jsonify({"error": "Service temporarily unavailable. Please try again."}), 503
+
+
+@app.route('/api/support', methods=['POST'])
+@token_required
+def submit_support():
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify({'error': 'Enter a subject and message.'}), 400
+    subject, message = body.get('subject'), body.get('message')
+    if not isinstance(subject, str) or not 1 <= len(subject.strip()) <= 150 or not isinstance(message, str) or not 1 <= len(message.strip()) <= 3000:
+        return jsonify({'error': 'Use a subject of 1–150 characters and a message of 1–3,000 characters.'}), 400
+    return jsonify({'support_id': db.create_support_request(request.user_id, subject.strip(), message.strip())}), 201
+
+
+@app.route('/api/admin/support', methods=['GET'])
+@admin_required
+def support_inbox():
+    return jsonify_safe(db.support_threads())
+
+
+@app.route('/api/support', methods=['GET'])
+@token_required
+def my_support_requests():
+    return jsonify_safe(db.support_threads(request.user_id))
+
+
+@app.route('/api/admin/support/<int:support_id>/replies', methods=['POST'])
+@admin_required
+def support_reply(support_id):
+    body = request.get_json(silent=True)
+    message = body.get('message') if isinstance(body, dict) else None
+    if not isinstance(message, str) or not 1 <= len(message.strip()) <= 3000:
+        return jsonify({'error': 'Enter a reply of 1–3,000 characters.'}), 400
+    if not db.reply_to_support(support_id, request.user_id, message.strip()):
+        return jsonify({'error': 'Support request not found.'}), 404
+    return jsonify({'message': 'Reply sent.'}), 201
+
+
+@app.route('/api/admin/support/<int:support_id>', methods=['PATCH'])
+@admin_required
+def support_status(support_id):
+    body = request.get_json(silent=True)
+    status = body.get('status') if isinstance(body, dict) else None
+    if status not in ('Open', 'Resolved'):
+        return jsonify({'error': 'Choose Open or Resolved.'}), 400
+    if not db.update_support_request(support_id, status):
+        return jsonify({'error': 'Support request not found.'}), 404
+    return jsonify({'status': status})
+
+
+@app.route('/api/chat', methods=['POST'])
+@token_required
+def career_chat():
+    from career_chat import validate_messages, reply
+    data = request.get_json() or {}
+    try:
+        messages = validate_messages(data.get('messages') if isinstance(data, dict) else None)
+    except ValueError as error:
+        return jsonify({'error': str(error)}), 400
+    result, status = reply(messages)
+    return jsonify(result), status
+
+
+
+
+@app.route('/api/students/<int:user_id>/applications/<int:job_id>/notes', methods=['PUT'])
+@token_required
+def application_notes(user_id, job_id):
+    if request.user_id != user_id:
+        return jsonify({'error': 'Unauthorized'}), 403
+    data = request.get_json() or {}
+    notes, interview_date = data.get('notes', ''), data.get('interview_date') or None
+    if not isinstance(notes, str) or len(notes) > 3000:
+        return jsonify({'error': 'Notes must be at most 3000 characters'}), 400
+    if interview_date:
+        try:
+            from datetime import date
+            date.fromisoformat(interview_date)
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Enter a valid interview date'}), 400
+    if not db.save_application_notes(user_id, job_id, notes.strip(), interview_date):
+        return jsonify({'error': 'Application not found'}), 404
+    return jsonify({'message': 'Application notes saved'})
+
+
+@app.route('/api/hidden-jobs/<int:job_id>', methods=['PUT', 'DELETE'])
+@token_required
+def hidden_job(job_id):
+    if not db.get_job_by_id(job_id):
+        return jsonify({'error': 'Job not found'}), 404
+    db.set_hidden_job(request.user_id, job_id, request.method == 'PUT')
+    return jsonify({'message': 'Job hidden' if request.method == 'PUT' else 'Job restored'})
+
+
+@app.route('/api/hidden-jobs/restore', methods=['POST'])
+@token_required
+def restore_hidden_jobs():
+    count = db.restore_hidden_jobs(request.user_id)
+    return jsonify({'message': f'{count} hidden jobs restored', 'count': count})
 
 
 if __name__ == "__main__":

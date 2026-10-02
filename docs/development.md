@@ -45,3 +45,25 @@ The opt-in MySQL test needs permission to create databases. It creates a uniquel
 ## Administrator accounts
 
 No default administrator is created. Register an account, then assign its database role as described in the [deployment guide](deployment.md).
+
+## Nova AI chatbot
+
+Create a Gemini API key in [Google AI Studio](https://aistudio.google.com/apikey)
+using a free-tier project without enabling billing. Set `GEMINI_API_KEY` in
+`backend/.env` and restart the backend. `GEMINI_MODEL` defaults to
+`gemini-3.1-flash-lite`, which supports the free tier. Never put the key in frontend
+code or commit it. Free quotas and availability are controlled by Google; enabling
+billing can incur charges. The app does not fall back to another paid provider.
+
+The floating chat is available after sign-in. Only chat messages are sent to Google;
+profile data, stored resumes and job listings are not automatically attached.
+Google's free-tier terms allow content to be used to improve its products, so avoid
+sensitive details. Chat history stays in React memory and clears on logout or reload.
+Credentials stay on the server. Without a key, the UI shows a service-not-configured
+message; rate limits show a retry message.
+
+## Contact Support
+
+Authenticated users submit requests through the footer or Profile Account Settings.
+Migration `007_support_requests.sql` stores requests in MySQL. Admins view the latest
+200 requests in Support Inbox and can resolve or reopen them. No email service is used.
