@@ -25,8 +25,9 @@ export default function TargetJobGap({ token, userId }) {
       {jobs.map(job => <option key={job.job_id} value={job.job_id}>{job.title} — {job.company_name}</option>)}
     </select>
     {error && <p role="alert">{error}</p>}
-    {gap && <div><h3>Target Job Match: {gap.match_pct}%</h3>
-      <progress aria-label="Target job skill match" value={gap.match_pct} max="100" />
+    {gap && <div><h3>Skill match: {gap.match_pct}%</h3>
+      <progress aria-label="Skill match" value={gap.match_pct} max="100" />
+      <p>Compares your profile skills with this job’s required skills.</p>
       <p><strong>Matched skills:</strong> {gap.matched.join(', ') || 'None'}</p>
       <p><strong>Missing required skills:</strong> {gap.missing.join(', ') || 'None'}</p>
       <p><strong>Preferred skills:</strong> {gap.preferred.join(', ') || 'None listed'}</p>

@@ -23,6 +23,8 @@ import requests
 from dotenv import load_dotenv
 
 import db
+from job_metadata import extract_salary
+from job_html import lever_html, clean_html, group_by_headings
 from nlp_tagger import tag_skills_for_job
 
 load_dotenv(Path(__file__).with_name(".env"))
@@ -84,6 +86,30 @@ def clean_text(value: Any) -> str:
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", text)).strip()
 
 
+def description_text(value: Any) -> str:
+    """Convert employer HTML into readable paragraphs and list items."""
+    from bs4 import BeautifulSoup
+    text = str(value or '')
+    for _ in range(2):
+        text = html.unescape(text)
+    soup = BeautifulSoup(text, 'html.parser')
+    for element in soup(['script', 'style']):
+        element.decompose()
+    for element in soup.find_all('br'):
+        element.replace_with('\n')
+    for element in soup.find_all('li'):
+        element.insert_before('\n• ')
+        element.append('\n')
+    for element in soup.find_all(re.compile(r'^h[1-6]$')):
+        element.insert_before('\n## ')
+        element.append('\n')
+    for element in soup.find_all(['p', 'div', 'section', 'ul', 'ol']):
+        element.insert_before('\n')
+        element.append('\n')
+    lines = [re.sub(r'[ \t\r\f\v]+', ' ', line).strip() for line in soup.get_text().replace('\xa0', ' ').split('\n')]
+    return '\n'.join(line for line in lines if line)
+
+
 def parse_posted_date(value: Any) -> str | None:
     if isinstance(value, (int, float)):
         return datetime.fromtimestamp(value / 1000).date().isoformat()
@@ -114,7 +140,19 @@ def format_salary(item: dict[str, Any]) -> str | None:
 
 
 def is_dfw(location: str) -> bool:
-    return any(re.search(r"(?<![a-z])" + re.escape(place) + r"(?![a-z])", location.lower()) for place in DFW_PLACES)
+    text = (location or '').lower()
+    if re.search(r'\b(?:dfw|dallas[–-]fort worth)\b', text):
+        return True
+    # Require Texas for Arlington; never accept an explicitly different state.
+    for place in DFW_PLACES:
+        if place == 'dfw':
+            continue
+        city = r'(?<![a-z])' + re.escape(place) + r'(?![a-z])'
+        if re.search(city + r'\s*,?\s+(?:tx|texas)\b', text):
+            return True
+        if place != 'arlington' and re.search(city + r'\s*(?:$|[;/|])', text):
+            return True
+    return False
 
 
 def is_tech_job(title: str) -> bool:
@@ -125,10 +163,10 @@ def is_tech_job(title: str) -> bool:
 
 def lever_description(item: dict[str, Any]) -> str:
     """Lever description."""
-    parts = [clean_text(item.get("descriptionPlain") or item.get("description"))]
+    parts = [description_text(item.get("descriptionPlain") or item.get("description"))]
     for section in item.get("lists") or []:
         heading = clean_text(section.get("text"))
-        content = clean_text(section.get("content"))
+        content = description_text(section.get("content"))
         if heading or content:
             parts.append(f"{heading}: {content}".strip())
     return "\n".join(part for part in parts if part)
@@ -142,7 +180,7 @@ def normalize_listing(item: dict[str, Any]) -> dict[str, Any] | None:
     if not source_url or not title or not company:
         return None
     location = clean_text((item.get("location") or {}).get("display_name"))
-    return {"company_name": company[:255], "title": title[:255], "description": clean_text(item.get("description")),
+    return {"company_name": company[:255], "title": title[:255], "description": description_text(item.get("description")), "description_html": item.get("description") if re.search(r"<(?:p|h[1-6]|ul|ol|li)\b", item.get("description") or "", re.I) else None,
             "location": location[:255] or None, "job_type": clean_text(item.get("contract_type")).replace("_", " ").title() or None,
             "salary_range": format_salary(item), "source_url": source_url[:1000], "date_posted": parse_posted_date(item.get("created")), "closing_date": closing_date(item)}
 
@@ -215,7 +253,7 @@ class PublicCompanyFeeds:
                 if not is_dfw(location) or not is_tech_job(title):
                     continue
                 yield {"company_name": source.name, "title": title[:255],
-                       "description": lever_description(item),
+                       "description": lever_description(item), "description_html": lever_html(item),
                        "location": location[:255], "job_type": clean_text((item.get("categories") or {}).get("commitment")) or None,
                        "salary_range": None, "source_url": str(item.get("hostedUrl") or "")[:1000],
                        "date_posted": parse_posted_date(item.get("createdAt")), "closing_date": closing_date(item), "_provider": source.key, "source_http_status": getattr(self, "source_http_status", None)}
@@ -230,7 +268,7 @@ class PublicCompanyFeeds:
                 if not is_dfw(locations) or not is_tech_job(title):
                     continue
                 yield {"company_name": source.name, "title": title[:255],
-                       "description": clean_text(item.get("content")), "location": locations[:255], "job_type": None,
+                       "description": description_text(item.get("content")), "description_html": item.get("content"), "location": locations[:255], "job_type": None,
                        "salary_range": None, "source_url": str(item.get("absolute_url") or "")[:1000],
                        "date_posted": parse_posted_date(item.get("first_published")), "closing_date": closing_date(item), "_provider": source.key, "source_http_status": getattr(self, "source_http_status", None)}
         else:
@@ -266,6 +304,8 @@ class AdzunaProvider:
 
 def ingest_job(job: dict[str, Any], stats: dict[str, int], dry_run: bool) -> None:
     stats["fetched"] += 1
+    if not is_dfw(job.get("location")):
+        return
     if dry_run:
         return
     provider = job.pop("_provider")
@@ -273,18 +313,23 @@ def ingest_job(job: dict[str, Any], stats: dict[str, int], dry_run: bool) -> Non
     if not company_id:
         stats["errors"] += 1
         return
+    if not job.get("salary_range"):
+        job["salary_range"] = extract_salary(job.get("description"))
     job_id, changed = db.upsert_job(company_id, provider=provider, **job)
     if not job_id:
         stats["errors"] += 1
         return
     stats["upserted"] += 1
+    cleaned = clean_html(job.get('description_html'), job.get('source_url'))
+    stats['with_html'] = stats.get('with_html', 0) + bool(cleaned)
+    stats['without_headings'] = stats.get('without_headings', 0) + bool(cleaned and not any(s['title'] for s in group_by_headings(cleaned)))
+    LOG.info('Description coverage: %s/%s HTML; %s HTML postings without source headings', stats['with_html'], stats['upserted'], stats['without_headings'])
     if changed:
         db.insert_snapshot(job_id, job["title"], job["salary_range"], True)
-        db.clear_job_skills(job_id)
-        for skill in tag_skills_for_job(job["description"]):
-            skill_id = db.insert_skill(skill["skill_name"])
-            if skill_id and db.link_job_skill(job_id, skill_id, skill["requirement_type"]):
-                stats["tagged"] += 1
+    # Re-extract even unchanged text: HTML or extraction rules may have changed.
+    tags = tag_skills_for_job(job['description'], cleaned)
+    db.replace_job_skills(job_id, tags)
+    stats['tagged'] += len(tags)
 
 
 def sync_jobs(settings: SyncSettings, dry_run: bool = False) -> dict[str, int]:
@@ -315,7 +360,7 @@ def sync_jobs(settings: SyncSettings, dry_run: bool = False) -> dict[str, int]:
             if not dry_run:
                 # Hide older jobs that are outside the tech filter.
                 non_tech_ids = [job["job_id"] for job in db.get_active_source_jobs(source.key)
-                                if not is_tech_job(job["title"])]
+                                if not is_tech_job(job["title"]) or not is_dfw(job.get("location"))]
                 stats["retired"] += db.deactivate_jobs(non_tech_ids)
                 if source_completed:
                     stats["retired"] += db.deactivate_stale_source_jobs(source.key, started_at)

@@ -127,6 +127,49 @@ def main():
         assert client.post('/api/resume/upload', headers=headers, data={'resume': (io.BytesIO(replacement), 'replacement.pdf')}).status_code == 200
         assert client.get('/api/resume/saved', headers=headers).json['filename'] == 'replacement.pdf'
         assert client.get('/api/resume/saved/file', headers=headers).data == replacement
+        html_id, _ = db.upsert_job(company, 'Structured Engineer', 'https://example.test/structured', provider='integration', description='Fallback text', description_html='<h2>Actual employer heading</h2><ul><li>Python</li></ul><script>bad()</script>')
+        structured = db.get_job_by_id(html_id)
+        assert structured['description_fetched_at'] is not None
+        assert structured['description_sections'][0]['title'] == 'Actual employer heading'
+        assert '<script>' not in structured['description_html']
+        assert '<li>Python</li>' in structured['description_sections'][0]['html']
+        # Tracking parameters must not create multiple records for one source job.
+        tracking_url = 'https://example.test/tracking-job?id=42'
+        first_id, _ = db.upsert_job(company, 'Tracking Engineer', tracking_url + '&utm_source=email',
+                                    provider='integration', closing_date='2000-01-01')
+        second_id, _ = db.upsert_job(company, 'Tracking Engineer', tracking_url + '&utm_source=social',
+                                     provider='integration', closing_date='2000-01-01')
+        assert first_id is not None and first_id == second_id
+        assert db.get_job_by_id(first_id)['source_url'] == tracking_url
+        assert db.get_job_count(q='Tracking Engineer') == 0
+        assert db.get_jobs(q='Tracking Engineer') == []
+        # Bulk addition is owner-scoped and atomic; dismissal never removes profile/resume skills.
+        impact_id, _ = db.upsert_job(company, 'Impact Engineer', 'https://example.test/impact', provider='integration', description='SQL and Docker or Kubernetes', description_html='<h2>Requirements</h2><ul><li>SQL</li><li>Docker or Kubernetes</li></ul>')
+        db.replace_job_skills(impact_id, [{'skill_name': value, 'requirement_type': 'required'} for value in ['sql', 'docker', 'kubernetes']])
+        assert db.flag_resume_skills(user, ['docker', 'kubernetes']) == 2
+        pending = {row['skill_name']: row['unmatched_id'] for row in db.get_flagged_skills(user)}
+        batch = [pending['docker'], pending['kubernetes']]
+        assert db.flag_resume_skills(other['user_id'], ['docker']) == 1
+        foreign = db.get_flagged_skills(other['user_id'])[0]['unmatched_id']
+        profile_before = set(db.get_user_skills(user))
+        assert client.post('/api/resume/skills/add', headers=headers, json={'flag_ids': [batch[0], foreign]}).status_code == 404
+        assert set(db.get_user_skills(user)) == profile_before
+        assert client.post('/api/resume/skills/add', headers=headers, json={'flag_ids': [True]}).status_code == 400
+        impact = client.post('/api/resume/skills/impact', headers=headers, json={'flag_ids': batch, 'discipline': ''})
+        assert impact.status_code == 200, impact.json
+        assert impact.json['projected_average'] > impact.json['current_average'], impact.json
+        assert impact.json['has_saved_resume'] is True
+        assert impact.json['skill_job_counts'][str(batch[0])] >= 1
+        assert client.delete(f'/api/resume/skills/{batch[0]}', headers=headers).status_code == 200
+        assert set(db.get_user_skills(user)) == profile_before
+        assert client.post(f'/api/resume/skills/{batch[0]}/restore', headers=other_headers).status_code == 404
+        assert client.post(f'/api/resume/skills/{batch[0]}/restore', headers=headers).status_code == 200
+        result = client.post('/api/resume/skills/add', headers=headers, json={'flag_ids': batch})
+        assert result.status_code == 200, result.json
+        assert {'docker', 'kubernetes'} <= {value.lower() for value in db.get_user_skills(user)}
+        assert profile_before <= set(db.get_user_skills(user))
+        assert not {row['unmatched_id'] for row in db.get_flagged_skills(user)} & set(batch)
+        assert client.get('/api/resume/saved/file', headers=headers).data == replacement
         print('PASS: fresh schema, repeated migrations, registration, real PDF upload, duplicate prevention, owner/admin access, approve/reject, profile persistence, application statuses, admin overview, unchanged skill-gap results')
     finally:
         cursor.execute(f'DROP DATABASE IF EXISTS `{name}`')

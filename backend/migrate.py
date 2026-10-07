@@ -53,6 +53,12 @@ def main():
                     if not cur.fetchone():
                         cur.execute(statement)
                     continue
+                if statement.upper().startswith(('ALTER TABLE JOBS ADD COLUMN DESCRIPTION_HTML', 'ALTER TABLE JOBS ADD COLUMN DESCRIPTION_FETCHED_AT')):
+                    column = statement.split()[5]
+                    cur.execute("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Jobs' AND COLUMN_NAME = %s", (column,))
+                    if not cur.fetchone():
+                        cur.execute(statement)
+                    continue
                 if statement.upper().startswith("ALTER TABLE JOBS"):
                     cur.execute("""SELECT COLUMN_NAME FROM information_schema.COLUMNS
                                    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Jobs'""")

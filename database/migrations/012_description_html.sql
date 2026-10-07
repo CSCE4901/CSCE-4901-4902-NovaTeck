@@ -1,0 +1,2 @@
+ALTER TABLE Jobs ADD COLUMN description_html MEDIUMTEXT NULL;
+ALTER TABLE Jobs ADD COLUMN description_fetched_at DATETIME NULL;

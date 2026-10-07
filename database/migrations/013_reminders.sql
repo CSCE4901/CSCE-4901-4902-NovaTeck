@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS Reminder_Preferences (
+ user_id INT PRIMARY KEY,
+ email_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+ FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS Reminder_Deliveries (
+ user_id INT NOT NULL,
+ reminder_key VARCHAR(160) NOT NULL,
+ sent_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ PRIMARY KEY(user_id, reminder_key),
+ FOREIGN KEY (user_id) REFERENCES Users(user_id) ON DELETE CASCADE
+);

@@ -1,15 +1,12 @@
-import MatchExplanation from "./components/MatchExplanation";
+import JobCard from './components/JobCard';
 import { careerCategories } from './careerCategories';
-import BookmarkIcon from "./components/BookmarkIcon";
 import ContactSupport from "./components/ContactSupport";
 import CareerChat from "./components/CareerChat";
-import ResumeMatch from "./components/ResumeMatch";
-import CompanyLogo from "./components/CompanyLogo";
 import NavIcon from "./components/NavIcon";
 import NovaLogo from "./components/NovaLogo";
 import HomePage from "./components/HomePage";
 import { responseError } from "./apiErrors";
-import { useState, useEffect, createContext, useContext } from "react";
+import { useState, useEffect, useRef, createContext, useContext } from "react";
 import { WireDashboard, WireProfile, WireJobDetail, WireSkillGap, WireAdmin } from "./components/WireframePages";
 import "./styles.css";
 
@@ -46,8 +43,11 @@ export default function App() {
     const u = storage.getItem("nt_user");
     try { return t && u ? { token: t, ...JSON.parse(u) } : null; } catch { return null; }
   });
+  const [homeFocus,setHomeFocus]=useState(null);
+  const [profileFocus, setProfileFocus] = useState(null);
   const [page, setPage] = useState(() => new URLSearchParams(window.location.search).get("resetToken") ? "reset" : (auth ? (["/admin", "/admin/flagged-skills"].includes(window.location.pathname) ? "admin" : "jobs") : "login"));
   const [selectedJobId, setSelectedJobId] = useState(null);
+  const [jobReturnPage, setJobReturnPage] = useState("jobs");
   const [theme, setTheme] = useState(() => localStorage.getItem("nt_theme") || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
   const [deviceTheme, setDeviceTheme] = useState(() => window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   useEffect(() => {
@@ -101,25 +101,45 @@ export default function App() {
     });
   }
 
-  useEffect(() => { window.scrollTo(0, 0); }, [page, selectedJobId]);
+  useEffect(() => {
+    if (/^#(?::r|job-section-)/.test(window.location.hash)) window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    window.scrollTo(0, 0);
+  }, [page, selectedJobId]);
 
-  function goJob(id) { setSelectedJobId(id); setPage("detail"); }
+  useEffect(() => {
+    const restorePage = event => {
+      if (!event.state?.novaPage) return;
+      setSelectedJobId(event.state.novaJobId || null);
+      setPage(event.state.novaPage);
+    };
+    window.addEventListener('popstate', restorePage);
+    return () => window.removeEventListener('popstate', restorePage);
+  }, []);
+  function goJob(id) {
+    setJobReturnPage(page);
+    window.history.replaceState({ ...window.history.state, novaPage: page, novaJobId: selectedJobId }, '', window.location.href);
+    window.history.pushState({ novaPage: 'detail', novaJobId: id }, '', window.location.href);
+    setSelectedJobId(id); setPage('detail');
+  }
+  function backFromJob() {
+    if (window.history.state?.novaPage === 'detail') window.history.back();
+    else setPage(jobReturnPage === 'detail' ? 'jobs' : jobReturnPage);
+  }
 
   return (
     <AuthContext.Provider value={auth}>
       <div className="app-shell">
-        {!["login", "register"].includes(page) && <Navbar page={page} setPage={setPage} logout={logout} auth={auth} theme={theme} deviceTheme={deviceTheme} setTheme={setTheme} toggleTheme={() => setTheme(theme === "dark" ? "light" : "dark")} />}
+        {!["login", "register"].includes(page) && <Navbar page={page} setPage={setPage} logout={logout} auth={auth} theme={theme} deviceTheme={deviceTheme} setTheme={setTheme} />}
         <div className="nova-page-container">
-          {["login", "register"].includes(page) && <div className="nova-auth-theme"><ThemeToggle theme={theme} onToggle={() => setTheme(theme === "dark" ? "light" : "dark")} /></div>}
           {page === "login"     && <LoginPage onLogin={login} setPage={setPage} />}
           {page === "register"  && <RegisterPage onLogin={login} setPage={setPage} />}
           {page === "forgot"    && <ForgotPasswordPage setPage={setPage} />}
           {page === "reset"     && <ResetPasswordPage setPage={setPage} />}
-          {page === "home" && auth && <HomePage setPage={setPage} auth={auth} request={apiFetch} goJob={goJob} />}
-          {page === "jobs"      && <JobListingsPage goJob={goJob} />}
-          {page === "detail"    && <WireJobDetail auth={auth} request={apiFetch} jobId={selectedJobId} goJob={goJob} setPage={setPage} />}
-          {page === "dashboard" && <WireDashboard auth={auth} request={apiFetch} goJob={goJob} setPage={setPage} />}
-          {page === "profile" && <WireProfile auth={auth} request={apiFetch} onNameChange={updateDisplayName} setPage={setPage} />}
+          {page === "home" && auth && <HomePage browseField={field=>{setHomeFocus(field);setPage('jobs');}} setPage={setPage} auth={auth} request={apiFetch} goJob={goJob} />}
+          {page === "jobs"      && <JobListingsPage initialFocus={homeFocus} goJob={goJob} />}
+          {page === "detail"    && <WireJobDetail auth={auth} request={apiFetch} jobId={selectedJobId} goJob={goJob} setPage={setPage} onBack={backFromJob} returnPage={jobReturnPage} />}
+          {page === "dashboard" && <WireDashboard auth={auth} request={apiFetch} goJob={goJob} setPage={(next, field) => { setProfileFocus(field || null); setPage(next); }} />}
+          {page === "profile" && <WireProfile focusField={profileFocus} auth={auth} request={apiFetch} onNameChange={updateDisplayName} setPage={setPage} />}
           {page === "skillgap"  && <WireSkillGap auth={auth} request={apiFetch} setPage={setPage} />}
           {page === "admin" && auth && <WireAdmin auth={auth} request={apiFetch} onForbidden={() => { window.history.replaceState({}, "", "/"); setPage("dashboard"); }} />}
         </div>
@@ -129,12 +149,39 @@ export default function App() {
   );
 }
 
-function ThemeToggle({ theme, onToggle }) { return <button type="button" className="nova-theme-toggle" onClick={() => onToggle()} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">{theme === "dark" ? <><circle cx="12" cy="12" r="4" /><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2" /></> : <path d="M20.5 14A9 9 0 0 1 10 3.5 9 9 0 1 0 20.5 14Z" />}</svg></button>; }
 
-function ThemeToggleIcon({ theme }) { return <span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span>; }
 
 // Navbar
-function Navbar({ page, setPage, logout, auth, theme, deviceTheme, setTheme, toggleTheme }) {
+export function Navbar({ page, setPage, logout, auth, theme, deviceTheme, setTheme }) {
+  const navRef = useRef(null);
+  const [scrollHidden, setScrollHidden] = useState(false);
+  const [navHeight, setNavHeight] = useState(84);
+  useEffect(() => {
+    const nav = navRef.current;
+    const measure = () => setNavHeight(nav.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(nav);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    setScrollHidden(false);
+    let previousY = Math.max(0, window.scrollY);
+    const onScroll = () => {
+      const y = Math.max(0, window.scrollY);
+      const nav = navRef.current;
+      if (y <= navHeight || nav?.querySelector(':focus-visible, [aria-expanded="true"]')) {
+        setScrollHidden(false);
+        previousY = y;
+        return;
+      }
+      if (Math.abs(y - previousY) < 8) return;
+      setScrollHidden(y > previousY);
+      previousY = y;
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [page, navHeight]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [restoring, setRestoring] = useState(false), [restoreMessage, setRestoreMessage] = useState('');
   async function restoreHidden() {
@@ -151,8 +198,8 @@ function Navbar({ page, setPage, logout, auth, theme, deviceTheme, setTheme, tog
     ...(auth?.role === 'admin' ? [['admin', 'Admin']] : []),
   ];
   return (
-    <nav className={`nova-nav${mobileOpen ? " is-mobile-open" : ""}`} aria-label="Main navigation" onKeyDown={event => { if (event.key === "Escape") setMobileOpen(false); }}>
-      <button className="nova-brand" onClick={() => setPage(auth ? 'home' : 'login')} aria-label="NovaTeck home"><NovaLogo /></button>
+    <nav ref={navRef} style={{ "--nova-nav-height": `${navHeight}px` }} className={`nova-nav${mobileOpen ? " is-mobile-open" : ""}${scrollHidden ? " is-scroll-hidden" : ""}`} onFocusCapture={() => setScrollHidden(false)} aria-label="Main navigation" onKeyDown={event => { if (event.key === "Escape") setMobileOpen(false); }}>
+      <button className="nova-brand nova-logo-button" onClick={() => setPage(auth ? 'home' : 'login')} aria-label="NovaTeck home"><NovaLogo /></button>
       <button type="button" className="nova-mobile-menu" aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={mobileOpen} aria-controls="nova-navigation-links" onClick={() => setMobileOpen(value => !value)}><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d={mobileOpen ? 'M6 6l12 12M6 18 18 6' : 'M4 6h16M4 12h16M4 18h16'} /></svg></button>
       <div className="nova-nav-links" id="nova-navigation-links">
         {auth && tabs.map(([key, label]) => <button key={key} className="nova-nav-tab" aria-current={page === key ? 'page' : undefined} onClick={() => setPage(key)}><NavIcon name={key} />{label}</button>)}
@@ -207,23 +254,24 @@ function LoginPage({ onLogin, setPage }) {
 
 function AuthLayout({ title, variant, setPage, children }) {
   return <main className={`auth-layout auth-layout--${variant}`}>
-    <header className="auth-brand-row"><button type="button" className="auth-brand" onClick={() => setPage("login")} aria-label="NovaTeck home"><NovaLogo /></button></header>
+    <header className="auth-brand-row"><button type="button" className="auth-brand nova-logo-button" onClick={() => setPage("login")} aria-label="NovaTeck home"><NovaLogo /></button></header>
     <h1 className="auth-title">{title}</h1>
     {children}
   </main>;
 }
 
-function AuthField({ id, label, type = "text", value, onChange, autoComplete, children, describedBy }) {
+function AuthField({ id, label, type = "text", value, onChange, autoComplete, placeholder, children, describedBy, error }) {
   return <div className="auth-field">
     <label htmlFor={id}>{label} :</label>
     <div className="auth-field-control">
-      <input id={id} name={id} type={type} value={value} onChange={event => onChange(event.target.value)} autoComplete={autoComplete} required aria-describedby={describedBy} />
+      <input id={id} name={id} type={type} value={value} onChange={event => onChange(event.target.value)} autoComplete={autoComplete} placeholder={placeholder} required aria-invalid={error ? true : undefined} aria-describedby={[describedBy, error && `${id}-error`].filter(Boolean).join(" ") || undefined} />
       {children}
+      {error && <p id={`${id}-error`} className="auth-field-error" role="alert">{error}</p>}
     </div>
   </div>;
 }
 
-function ForgotPasswordPage({ setPage }) {
+export function ForgotPasswordPage({ setPage }) {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -244,7 +292,7 @@ function ForgotPasswordPage({ setPage }) {
   </Card></div>;
 }
 
-function ResetPasswordPage({ setPage }) {
+export function ResetPasswordPage({ setPage }) {
   const [token, setToken] = useState(() => new URLSearchParams(window.location.search).get("resetToken") || "");
   const [password, setPassword] = useState(""); const [confirm, setConfirm] = useState(""); const [message, setMessage] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -269,48 +317,52 @@ function ResetPasswordPage({ setPage }) {
 // RegisterPage
 function RegisterPage({ onLogin, setPage }) {
   const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "" });
-  const [err, setErr]   = useState("");
+  const [err, setErr] = useState("");
+  const [errors, setErrors] = useState({});
+  function updateField(field, value) {
+    setForm(current => ({ ...current, [field]: value }));
+    setErrors(current => ({ ...current, [field]: "", ...(field === "password" ? { confirmPassword: "" } : {}) }));
+    setErr("");
+  }
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit() {
     setErr("");
-    if (!EMAIL_PATTERN.test(form.email.trim())) {
-      setErr("Enter a valid email address.");
-      return;
-    }
-    if (!PASSWORD_PATTERN.test(form.password)) {
-      setErr("Use 8+ characters with uppercase, lowercase, and a number.");
-      return;
-    }
-    if (form.password !== form.confirmPassword) {
-      setErr("Passwords do not match.");
-      return;
-    }
+    const nextErrors = {};
+    if (!form.name.trim()) nextErrors.name = "Enter your full name.";
+    if (!EMAIL_PATTERN.test(form.email.trim())) nextErrors.email = "Enter a valid email address.";
+    if (!PASSWORD_PATTERN.test(form.password)) nextErrors.password = "Use 8+ characters with uppercase, lowercase, and a number.";
+    if (!form.confirmPassword || form.password !== form.confirmPassword) nextErrors.confirmPassword = "Passwords do not match.";
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length) return;
     setLoading(true);
     try {
       const { confirmPassword, ...registration } = form;
       const data = await apiFetch("/auth/register", { method: "POST", body: JSON.stringify(registration) });
       onLogin(data.token, { user_id: data.user_id, name: data.name });
-    } catch (e) { setErr(e.message); }
+    } catch (e) {
+      if (/email.*(already|registered|exists)/i.test(e.message)) setErrors({ email: e.message });
+      else setErr(e.message);
+    }
     setLoading(false);
   }
 
   const strength = !form.password ? 0 : !PASSWORD_PATTERN.test(form.password) ? 1 : form.password.length < 12 ? 2 : 3;
-  const strengthLabel = ["", "Weak", "Medium", "Strong"][strength];
+  const strengthLabel = ["Weak", "Weak", "Medium", "Strong"][strength];
   return (
     <AuthLayout title="Create an Account" variant="register" setPage={setPage}>
-      <form className="auth-form" onSubmit={event => { event.preventDefault(); handleSubmit(); }}>
+      <form className="auth-form" noValidate onSubmit={event => { event.preventDefault(); handleSubmit(); }}>
         {err && <div className="auth-form-message"><Alert msg={err} /></div>}
-        <AuthField id="register-name" label="Full Name" autoComplete="name" value={form.name} onChange={name => setForm(current => ({ ...current, name }))} />
-        <AuthField id="register-email" label="Email address" type="email" autoComplete="email" value={form.email} onChange={email => setForm(current => ({ ...current, email }))} />
-        <AuthField id="register-password" label="Password" type="password" autoComplete="new-password" value={form.password} onChange={password => setForm(current => ({ ...current, password }))} describedBy="password-strength">
-          <div id="password-strength" className="auth-password-strength" aria-live="polite" title="Use 8+ characters with uppercase, lowercase, and a number.">
+        <AuthField id="register-name" label="Full Name" autoComplete="name" placeholder="Jane Doe" value={form.name} error={errors.name} onChange={name => updateField("name", name)} />
+        <AuthField id="register-email" label="Email address" type="email" autoComplete="email" placeholder="you@example.com" value={form.email} error={errors.email} onChange={email => updateField("email", email)} />
+        <AuthField id="register-password" label="Password" type="password" autoComplete="new-password" placeholder="At least 8 characters" value={form.password} error={errors.password} onChange={password => updateField("password", password)} describedBy="password-strength">
+          <div id="password-strength" className="auth-password-strength" data-strength={strengthLabel.toLowerCase()} aria-live="polite" title="Use 8+ characters with uppercase, lowercase, and a number.">
             <span>Password Strength:</span>
-            <meter min="0" max="3" low="1.5" high="2.5" optimum="3" value={strength} aria-label={`Password strength${strengthLabel ? `: ${strengthLabel}` : ': not entered'}`} />
-            <span>{strengthLabel}</span>
+            <span className="auth-strength-meter" role="meter" aria-valuemin={0} aria-valuemax={3} aria-valuenow={strength} aria-valuetext={strengthLabel} aria-label="Password strength"><span style={{ width: `${strength / 3 * 100}%` }} /></span>
+            <span className="auth-strength-label">{strengthLabel}</span>
           </div>
         </AuthField>
-        <AuthField id="register-confirm" label="Confirm Password" type="password" autoComplete="new-password" value={form.confirmPassword} onChange={confirmPassword => setForm(current => ({ ...current, confirmPassword }))} />
+        <AuthField id="register-confirm" label="Confirm Password" type="password" autoComplete="new-password" placeholder="Re-enter your password" value={form.confirmPassword} error={errors.confirmPassword} onChange={confirmPassword => updateField("confirmPassword", confirmPassword)} />
         <div className="auth-actions"><button className="primary-button auth-submit" type="submit" disabled={loading}>{loading ? "Creating account…" : "Create Account"}</button></div>
         <div className="auth-links">
           <p>Already have an account? <button className="text-button" type="button" onClick={() => setPage("login")}>Sign In Here</button></p>
@@ -322,9 +374,9 @@ function RegisterPage({ onLogin, setPage }) {
 }
 
 // JobListingsPage
-function JobListingsPage({ goJob }) {
+function JobListingsPage({ goJob, initialFocus }) {
   const auth = useAuth();
-  const [focus, setFocus] = useState([]);
+  const [focus, setFocus] = useState(initialFocus ? [initialFocus] : []);
   const [sort, setSort] = useState("match");
   const [jobs, setJobs]         = useState([]);
   const [loading, setLoading]   = useState(true);
@@ -367,6 +419,8 @@ function JobListingsPage({ goJob }) {
       await load(page);
     } catch (error) { setMsg(error.message); }
   }
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filterCount = workTypes.length + experience.split(',').filter(Boolean).length + skill.length + focus.length + [location.trim(), companyId].filter(Boolean).length;
   const [filterFeedback, setFilterFeedback] = useState('');
   useEffect(() => { setFilterFeedback(''); }, [focus, skill, workTypes, experience, location, companyId, query]);
   useEffect(() => {
@@ -409,7 +463,8 @@ function JobListingsPage({ goJob }) {
 
   useEffect(() => {
     apiFetch("/search-options", {}, auth?.token).then(setOptions).catch(() => {});
-    apiFetch(`/students/${auth.user_id}/profile-details`, {}, auth.token).then(details => { const initialFocus = details.career_focus ? [details.career_focus] : []; setFocus(initialFocus); load(0, false, sort, initialFocus); }).catch(() => load(0));
+    if (initialFocus) { load(0, false, sort, [initialFocus]); }
+    else apiFetch(`/students/${auth.user_id}/profile-details`, {}, auth.token).then(details => { const savedFocus = details.career_focus ? [details.career_focus] : []; setFocus(savedFocus); load(0, false, sort, savedFocus); }).catch(() => load(0));
   }, []);
 
   function clearFilters() {
@@ -420,13 +475,14 @@ function JobListingsPage({ goJob }) {
   return (
     <main className="wf-page">
       <p className="nova-eyebrow">FIND YOUR NEXT MOVE</p><h1>DFW Tech Jobs</h1>
-      <p style={{ color: "#6b7280", marginBottom: 20 }}>Browse and filter jobs from top DFW technology companies</p>
+      <p className="nova-jobs-subtitle">Browse roles with DFW locations.</p>
 
-      <div className="wf-search-row nova-job-search"><div className="nova-job-search-input"><NavIcon name="jobs" /><input id="job-search" aria-label="Search jobs" placeholder="Search job titles, companies, or keywords" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => event.key === "Enter" && load(0)} /></div><button className="primary-button" onClick={() => load(0)}>Search</button></div>
-      <section className="wf-filters nova-filter-panel"><header className="nova-filter-heading"><div className="nova-filter-title"><span className="nova-filter-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6" /></svg></span><div><h2>Filters</h2><p>Fine-tune your next opportunity.</p></div></div><span className="nova-filter-count">{workTypes.length + experience.split(',').filter(Boolean).length + skill.length + focus.length + [location.trim(), companyId].filter(Boolean).length} selected</span></header>
-        <div className="wf-field"><span id="job-focus-label">Career Focus</span><details className="nova-skill-select"><summary aria-labelledby="job-focus-label job-focus-summary"><span id="job-focus-summary">{focus.length === 1 ? careerCategories.find(([value]) => value === focus[0])?.[1] : focus.length ? `${focus.length} career fields selected` : 'All Career Categories'}</span><span aria-hidden="true">⌄</span></summary><div className="nova-skill-options"><button type="button" className="text-button" onClick={() => setFocus([])}>All Career Categories</button>{careerCategories.filter(([value]) => value).map(([value, label]) => <label key={value}><input type="checkbox" checked={focus.includes(value)} onChange={event => setFocus(current => event.target.checked ? [...current, value] : current.filter(item => item !== value))} />{label}</label>)}</div></details></div><div className="wf-field"><span>Work Type</span><div className="wf-inline">{['Full-time', 'Part-time', 'Contract', 'Internship'].map(type => <label className="nova-filter-pill" key={type}><input type="checkbox" checked={workTypes.includes(type)} onChange={e => setWorkTypes(e.target.checked ? [...workTypes, type] : workTypes.filter(t => t !== type))} /> {type}</label>)}</div></div>
+      <div className="wf-search-row nova-job-search"><div className="nova-job-search-input"><NavIcon name="jobs" /><input id="job-search" aria-label="Search jobs" placeholder="Search job titles, companies, or keywords" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => event.key === "Enter" && applyFilters()} /></div><button className="primary-button" disabled={loading} onClick={applyFilters}>Search</button></div>
+      <div className="nova-filter-toolbar"><button type="button" className="wf-secondary" aria-expanded={filtersOpen} aria-controls="job-filters" onClick={() => setFiltersOpen(open => !open)}>Filters ({filterCount})</button><button type="button" className="text-button" onClick={clearFilters} disabled={loading}>Clear all</button><span role="status">{filterFeedback || "Results update when you apply filters."}</span></div>
+      <section id="job-filters" hidden={!filtersOpen} className="wf-filters nova-filter-panel"><header className="nova-filter-heading"><div className="nova-filter-title"><span className="nova-filter-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6" /></svg></span><div><h2>Filters</h2><p>Fine-tune your next opportunity.</p></div></div><span className="nova-filter-count">{filterCount} selected</span></header>
+        <div className="wf-field"><span id="job-focus-label">Career Focus</span><details className="nova-skill-select"><summary aria-labelledby="job-focus-label job-focus-summary"><span id="job-focus-summary">{focus.length === 1 ? careerCategories.find(([value]) => value === focus[0])?.[1] : focus.length ? `${focus.length} career fields selected` : 'All Career Categories'}</span><span aria-hidden="true">⌄</span></summary><div className="nova-skill-options"><button type="button" className="text-button" onClick={() => setFocus([])}>All Career Categories</button>{careerCategories.filter(([value]) => value).map(([value, label]) => <label key={value}><input type="checkbox" checked={focus.includes(value)} onChange={event => setFocus(current => event.target.checked ? [...current, value] : current.filter(item => item !== value))} />{label}</label>)}</div></details></div><div className="wf-field"><span>Work Type</span><div className="wf-inline">{['Full-time', 'Part-time', 'Contract', 'Internship'].map(type => <button type="button" className="nova-filter-pill" key={type} aria-pressed={workTypes.includes(type)} onClick={() => setWorkTypes(current => current.includes(type) ? current.filter(t => t !== type) : [...current, type])}>{type}</button>)}</div></div>
         <div className="wf-field"><span id="job-skill-label">Skills</span><details className="nova-skill-select"><summary aria-labelledby="job-skill-label job-skill-summary"><span id="job-skill-summary">{skill.length ? `${skill.length} skills selected` : 'All skills'}</span><span aria-hidden="true">⌄</span></summary><div className="nova-skill-options"><button type="button" className="text-button" onClick={() => setSkill([])}>Clear selected skills</button>{options.skills.map(value => <label key={value}><input type="checkbox" checked={skill.includes(value)} onChange={event => setSkill(current => event.target.checked ? [...current, value] : current.filter(item => item !== value))} />{value}</label>)}</div></details></div>
-        <div className="wf-field"><span>Experience</span><div className="wf-inline">{[['entry','Entry / intern'],['mid','Mid-level'],['senior','Senior / lead']].map(([value,label]) => <label className="nova-filter-pill" key={value}><input type="checkbox" checked={experience.split(',').includes(value)} onChange={e => setExperience(e.target.checked ? [...experience.split(',').filter(Boolean),value].join(',') : experience.split(',').filter(v => v !== value).join(','))} /> {label}</label>)}</div></div>
+        <div className="wf-field"><span>Experience</span><div className="wf-inline">{[['entry','Entry / intern'],['mid','Mid-level'],['senior','Senior / lead']].map(([value,label]) => <button type="button" className="nova-filter-pill" key={value} aria-pressed={experience.split(',').includes(value)} onClick={() => setExperience(current => current.split(',').includes(value) ? current.split(',').filter(v => v !== value).join(',') : [...current.split(',').filter(Boolean), value].join(','))}>{label}</button>)}</div></div>
         <div className="wf-field"><span>Location / Company</span><div className="wf-inline"><input placeholder="City or location" aria-label="Filter by location" value={location} onChange={e => setLocation(e.target.value)} list="location-options" /><datalist id="location-options">{options.locations.map(value => <option key={value} value={value} />)}</datalist><select aria-label="Filter by company" value={companyId} onChange={e => setCompanyId(e.target.value)}><option value="">All companies</option>{options.companies.map(c => <option key={c.company_id} value={c.company_id}>{c.name}</option>)}</select></div></div>
       <footer className="nova-filter-footer"><span role="status" className={filterFeedback ? "nova-filter-success" : ""}>{filterFeedback || (loading ? "Applying your filters…" : "Choose your filters, then apply to update results.")}</span><div><button className="wf-secondary" onClick={clearFilters} disabled={loading}>Reset</button><button className="primary-button" onClick={applyFilters} disabled={loading}>{loading ? 'Applying…' : 'Apply Filters'}</button></div></footer>
       </section>
@@ -437,33 +493,7 @@ function JobListingsPage({ goJob }) {
           <div className="nova-results-heading"><div className="nova-results-title"><h2>Results</h2><p>{total} jobs found</p></div><label>Sort by <select value={sort} onChange={event => { setSort(event.target.value); load(0, false, event.target.value); }}><option value="match">Highest match</option><option value="newest">Newest posted</option></select></label></div>
           <div style={{ display: "grid", gap: 16 }}>
             {jobs.map(job => (
-              <article key={job.job_id} className="nova-modern-job">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "nowrap", gap: 12 }}>
-                  <CompanyLogo job={job} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>
-                      <button type="button" className="text-button wf-job-title" onClick={() => goJob(job.job_id)}>{job.title}</button>
-                    </h3>
-                    <p style={{ margin: "4px 0 0", color: "#374151", fontSize: 14 }}>
-                      {job.company_name} · {job.location}
-                    </p>
-                    <div className="nova-card-match"><ResumeMatch job={job} /></div><MatchExplanation job={job} />
-                    {job.skill_summary && <div className="nova-job-skill-chips" aria-label="Required skills">{job.skill_summary.split(", ").slice(0, 5).map(skill => <span key={skill}>{skill}</span>)}</div>}
-                  </div>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                    {job.salary_range && <span style={tagStyle("#d1fae5", "#065f46")}>Salary: {job.salary_range}</span>}<button type="button" className="wf-secondary nova-bookmark-button" aria-label={savedIds.includes(job.job_id) ? `Unsave ${job.title}` : `Save ${job.title}`} title={savedIds.includes(job.job_id) ? 'Remove from saved jobs' : 'Save job'} disabled={!savedReady || saving !== null} onClick={() => toggleSave(job)}><BookmarkIcon saved={savedIds.includes(job.job_id)} /></button>
-                  </div>
-                </div>
-                <div className="nova-modern-job-footer">
-                  <span style={{ fontSize: 12, color: "#64748b" }}>Posted: {job.date_posted || "Not provided"}</span>
-                  <div className="nova-listing-actions" onClick={event => event.stopPropagation()}>
-                    {applicationStatuses[job.job_id] && <span className="nova-application-card-status" role="status">{applicationStatuses[job.job_id] === "Opened employer site" ? "Application page opened" : applicationStatuses[job.job_id]}</span>}
-                    {job.source_url && /^https?:\/\//i.test(job.source_url) && <a className="primary-button" href={job.source_url} target="_blank" rel="noopener noreferrer" onClick={() => trackOpening(job)}>Apply Now</a>}
-
-                  </div>
-
-                </div>
-              </article>
+              <JobCard key={job.job_id} job={job} goJob={goJob} saved={savedIds.includes(job.job_id)} onSave={toggleSave} busy={!savedReady || saving !== null} onApply={trackOpening} applicationStatus={applicationStatuses[job.job_id]} />
             ))}
           </div>
           {<div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, marginTop: 24 }}>

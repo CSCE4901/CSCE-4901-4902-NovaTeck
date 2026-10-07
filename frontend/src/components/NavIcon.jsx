@@ -1,4 +1,5 @@
 const paths = {
+  alerts: 'M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4M12 2V1',
   projects: 'M3 7h7l2 2h9v12H3V7ZM3 7V4h7l2 3M8 14l-2 2 2 2m8-4 2 2-2 2m-3-5-2 6',
   skills: 'M14 6a5 5 0 0 0-6-4l3 3-3 3-3-3a5 5 0 0 0 6 6l8 8a2 2 0 0 0 3-3l-8-8Z',
   upload: 'M14 2H5v20h14V7l-5-5ZM14 2v5h5M12 18v-7m-3 3 3-3 3 3',

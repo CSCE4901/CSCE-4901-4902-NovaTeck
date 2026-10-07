@@ -128,9 +128,15 @@ class DatabaseWorkflowTests(unittest.TestCase):
         conn.rollback.assert_called_once(); conn.commit.assert_not_called()
 
     def test_skill_gap_regression(self):
-        with patch.object(db, 'get_user_skills', return_value=['Python']), patch.object(db, 'get_job_by_id', return_value={'skills': [
-            {'skill_name': 'python', 'requirement_type': 'required'}, {'skill_name': 'sql', 'requirement_type': 'required'}, {'skill_name': 'aws', 'requirement_type': 'preferred'}]}):
-            self.assertEqual(db.get_skill_gap(1, 1), {'user_skills': ['python'], 'matched': ['python'], 'missing': ['sql'], 'preferred': ['aws'], 'match_pct': 50, 'total_required': 2})
+        job = {'job_id': 1, 'skills': [
+            {'skill_name': 'python', 'requirement_type': 'required'}, {'skill_name': 'sql', 'requirement_type': 'required'}, {'skill_name': 'aws', 'requirement_type': 'preferred'}]}
+        conn, cur, context = self.connection([])
+        cur.fetchall.return_value = [{'job_id': 1, 'skill_name': 'python'}, {'job_id': 1, 'skill_name': 'sql'}]
+        with context, patch.object(db, 'get_saved_resume', return_value=None), patch.object(db, 'get_user_skills', return_value=['Python']), patch.object(db, 'get_job_by_id', return_value=job):
+            result = db.get_skill_gap(1, 1)
+            self.assertEqual({key: result[key] for key in ['matched', 'missing', 'preferred', 'match_pct', 'total_required']}, {'matched': ['python'], 'missing': ['sql'], 'preferred': ['aws'], 'match_pct': 50, 'total_required': 2})
+            self.assertEqual(result['resume_match_source'], 'profile')
+
 
 
 if __name__ == '__main__': unittest.main()

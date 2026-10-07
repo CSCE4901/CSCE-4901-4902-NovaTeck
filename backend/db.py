@@ -1,12 +1,14 @@
 """Db."""
 
 import os
+import re
 import hashlib
 import logging
 from pathlib import Path
 from contextlib import contextmanager
 import mysql.connector
 from mysql.connector import Error
+from job_metadata import with_salary
 from dotenv import load_dotenv
 
 # Load local database settings.
@@ -140,8 +142,12 @@ def insert_job(company_id, title, source_url, description=None,
 
 
 def upsert_job(company_id, title, source_url, provider, description=None,
-               location=None, job_type=None, salary_range=None, date_posted=None, source_http_status=None, closing_date=None):
-    """Upsert job."""
+               location=None, job_type=None, salary_range=None, date_posted=None, source_http_status=None, closing_date=None, description_html=None):
+    """Upsert job using a source URL without advertising trackers."""
+    from job_metadata import canonical_job_url
+    source_url = canonical_job_url(source_url)
+    from job_html import clean_html
+    description_html = clean_html(description_html, source_url)
     select_sql = """SELECT job_id, title, description, location, job_type,
                            salary_range, date_posted, is_active
                     FROM Jobs WHERE source_url = %s"""
@@ -164,6 +170,8 @@ def upsert_job(company_id, title, source_url, provider, description=None,
                 cur.execute(insert_sql, insert_values)
                 job_id = cur.lastrowid
                 cur.execute("UPDATE Jobs SET source_http_status=%s, closing_date=%s WHERE job_id=%s", (source_http_status, closing_date, job_id))
+                if description_html:
+                    cur.execute("UPDATE Jobs SET description_html=%s, description_fetched_at=UTC_TIMESTAMP() WHERE job_id=%s", (description_html, job_id))
                 conn.commit()
                 return job_id, True
             fields = ("title", "description", "location", "job_type", "salary_range", "date_posted")
@@ -174,11 +182,30 @@ def upsert_job(company_id, title, source_url, provider, description=None,
             ) or not existing["is_active"]
             cur.execute(update_sql, values + (provider, existing["job_id"]))
             cur.execute("UPDATE Jobs SET source_http_status=%s, closing_date=%s WHERE job_id=%s", (source_http_status, closing_date, existing["job_id"]))
+            if description_html:
+                cur.execute("UPDATE Jobs SET description_html=%s, description_fetched_at=UTC_TIMESTAMP() WHERE job_id=%s", (description_html, existing["job_id"]))
             conn.commit()
             return existing["job_id"], changed
     except Error as e:
         log.error(f"upsert_job failed: {e}")
         return None, False
+
+
+def replace_job_skills(job_id, tags):
+    """Replace one job's skill tags atomically; a failed write keeps old tags."""
+    with get_connection() as conn:
+        try:
+            cur = conn.cursor()
+            cur.execute('DELETE FROM Job_Skills WHERE job_id=%s', (job_id,))
+            for tag in tags:
+                cur.execute("INSERT INTO Skills (skill_name, skill_type) VALUES (%s, 'technical') ON DUPLICATE KEY UPDATE skill_name=skill_name", (tag['skill_name'],))
+                cur.execute('SELECT skill_id FROM Skills WHERE LOWER(skill_name)=LOWER(%s)', (tag['skill_name'],))
+                skill_id = cur.fetchone()[0]
+                cur.execute('INSERT INTO Job_Skills (job_id, skill_id, requirement_type) VALUES (%s,%s,%s)', (job_id, skill_id, tag['requirement_type']))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
 
 
 def clear_job_skills(job_id):
@@ -215,7 +242,7 @@ def get_active_source_jobs(provider):
     try:
         with get_connection() as conn:
             cur = conn.cursor(dictionary=True)
-            cur.execute("""SELECT job_id, title FROM Jobs
+            cur.execute("""SELECT job_id, title, location FROM Jobs
                            WHERE source_provider = %s AND is_active = TRUE""", (provider,))
             return cur.fetchall()
     except Error as e:
@@ -375,10 +402,10 @@ def get_jobs(skill=None, location=None, company_id=None, experience=None, discip
         with get_connection() as conn:
             cur = conn.cursor(dictionary=True)
             cur.execute(sql, params)
-            return cur.fetchall()
+            return [with_salary(job) for job in cur.fetchall()]
     except Error as e:
         log.error(f"get_jobs failed: {e}")
-        return []
+        raise
 
 
 def get_job_count(skill=None, location=None, company_id=None, experience=None, discipline=None, is_active=True, q=None, work_type=None, exclude_applications_user_id=None):
@@ -394,7 +421,7 @@ def get_job_count(skill=None, location=None, company_id=None, experience=None, d
             return cur.fetchone()[0]
     except Error as e:
         log.error(f"get_job_count failed: {e}")
-        return 0
+        raise
 
 
 def get_search_options():
@@ -421,7 +448,7 @@ def get_search_options():
             return {"skills": skills, "companies": companies, "locations": locations}
     except Error as e:
         log.error(f"get_search_options failed: {e}")
-        return {"skills": [], "companies": [], "locations": []}
+        raise
 
 
 def get_job_by_id(job_id):
@@ -447,12 +474,19 @@ def get_job_by_id(job_id):
                 return None
             cur.execute(skills_sql, (job_id,))
             job["skills"] = cur.fetchall()
-            from job_metadata import extract_experience
-            job["experience_level"] = job.get("experience_level") or extract_experience(job.get("description"))
-            return job
+            from job_metadata import extract_experience, experience_summary, extract_work_type
+            stored_experience = job.get("experience_level") or ""
+            if len(stored_experience) > 450 or re.search(r'&(?:nbsp|amp|lt|gt);|<[^>]+>', stored_experience):
+                stored_experience = ""
+            job["experience_level"] = experience_summary(stored_experience) or experience_summary(extract_experience(job.get("description")))
+            job["work_arrangement"] = extract_work_type(job.get("description"))
+            from job_html import clean_html, group_by_headings
+            # Re-sanitize on read as defense against manual or legacy database writes.
+            job['description_sections'] = group_by_headings(clean_html(job.get('description_html'), job.get('source_url')))
+            return with_salary(job)
     except Error as e:
         log.error(f"get_job_by_id failed: {e}")
-        return None
+        raise
 
 
 def update_job(job_id, **fields):
@@ -560,7 +594,7 @@ def insert_user(name, email, password_hash, skills=None):
             return None
     except Error as e:
         log.error(f"insert_user failed: {e}")
-        return None
+        raise
 
 
 def get_user_by_email(email):
@@ -571,7 +605,7 @@ def get_user_by_email(email):
             return cur.fetchone()
     except Error as e:
         log.error(f"get_user_by_email failed: {e}")
-        return None
+        raise
 
 
 def get_user_by_id(user_id):
@@ -582,7 +616,7 @@ def get_user_by_id(user_id):
             return cur.fetchone()
     except Error as e:
         log.error(f"get_user_by_id failed: {e}")
-        return None
+        raise
 
 
 def update_user(user_id, **fields):
@@ -751,7 +785,7 @@ def get_saved_jobs(user_id):
         with get_connection() as conn:
             cur = conn.cursor(dictionary=True)
             cur.execute(sql, (user_id,))
-            return cur.fetchall()
+            return [with_salary(job) for job in cur.fetchall()]
     except Error as e:
         log.error(f"get_saved_jobs failed: {e}")
         return []
@@ -760,42 +794,23 @@ def get_saved_jobs(user_id):
 # SKILL GAP ANALYSIS
 
 def get_skill_gap(user_id, job_id):
-    """Get skill gap."""
-    user_skills = get_user_skills(user_id)
-
-    if not user_skills:
-        user = get_user_by_id(user_id)
-        if user and user.get("skills"):
-            user_skills = [s.strip() for s in user["skills"].split(",")]
-
+    """Use the same requirement groups and saved skills as job-card scores."""
     job = get_job_by_id(job_id)
-    if not job or not job.get("skills"):
-        return {"matched": [], "missing": [], "preferred": [], "match_pct": 0}
-
-    user_set = {s.strip().lower() for s in user_skills}
-
-    job_required  = [s["skill_name"] for s in job["skills"] if s["requirement_type"] == "required"]
-    job_preferred = [s["skill_name"] for s in job["skills"] if s["requirement_type"] == "preferred"]
-
-    matched = [s for s in job_required if s.lower() in user_set]
-    missing = [s for s in job_required if s.lower() not in user_set]
-    total   = len(job_required)
-    pct     = round((len(matched) / total) * 100) if total else 0
-
-    return {
-        "user_skills":    sorted(user_set),
-        "matched":        matched,
-        "missing":        missing,
-        "preferred":      job_preferred,
-        "match_pct":      pct,
-        "total_required": total,
-    }
+    if not job:
+        return {"matched": [], "missing": [], "preferred": [], "match_pct": None, "total_required": 0}
+    comparison = add_resume_matches(user_id, [job])[0]
+    groups = comparison['resume_requirement_groups']
+    return {**comparison,
+            'matched': [' / '.join(group['skills']) for group in groups if group['status'] == 'matched'],
+            'missing': [' / '.join(group['skills']) for group in groups if group['status'] == 'missing'],
+            'preferred': [skill['skill_name'] for skill in job.get('skills', []) if skill['requirement_type'] == 'preferred'],
+            'match_pct': comparison['resume_match_pct'], 'total_required': comparison['resume_required_count']}
 
 
-def get_student_skill_gap_summary(user_id, discipline=None):
+def get_student_skill_gap_summary(user_id, discipline=None, profile_override=None):
     """Get student skill gap summary."""
-    user_skills = get_user_skills(user_id)
-    if not user_skills:
+    user_skills = get_user_skills(user_id) if profile_override is None else profile_override
+    if not user_skills and profile_override is None:
         user = get_user_by_id(user_id)
         if user and user.get("skills"):
             user_skills = [s.strip() for s in user["skills"].split(",")]
@@ -841,6 +856,8 @@ def get_student_skill_gap_summary(user_id, discipline=None):
             "missing_skills":  missing_skills[:10],
             "matched_skills":  matched_skills,
             "overall_match_pct": overall_pct,
+            "requested_skill_count": len(all_skills),
+            "matched_skill_count": len(matched_skills),
             "discipline": discipline or "all",
         }
     except Error as e:
@@ -914,13 +931,17 @@ def review_flagged_skill(flag_id, admin_id, approve):
             raise
 
 
-def get_recommendations(user_id, discipline=None):
+def get_recommendations(user_id, discipline=None, limit=5):
     """Get recommendations."""
     focus_filter = ' AND LOWER(j.title) REGEXP %s' if discipline in DISCIPLINE_PATTERNS else ''
     args = (user_id, user_id, user_id, user_id, DISCIPLINE_PATTERNS[discipline]) if focus_filter else (user_id, user_id, user_id, user_id)
+    limit_clause = " LIMIT %s" if limit is not None else ""
+    if limit is not None:
+        args = (*args, limit)
     with get_connection() as conn:
         cur = conn.cursor(dictionary=True)
         cur.execute(f"""SELECT j.job_id, j.title, c.name AS company_name, c.website_url AS company_website, j.location,
+                    j.source_url, j.date_posted, j.closing_date, j.is_active, j.salary_range,
                     COUNT(DISTINCT us.skill_id) AS matching_skills,
                     ROUND(100 * COUNT(DISTINCT us.skill_id) / COUNT(DISTINCT js.skill_id)) AS match_pct
                 FROM Jobs j JOIN Companies c ON c.company_id = j.company_id
@@ -933,7 +954,7 @@ def get_recommendations(user_id, discipline=None):
                   AND NOT EXISTS (SELECT 1 FROM Application_Activity activity WHERE activity.job_id = j.job_id AND activity.user_id = %s){focus_filter}
                 GROUP BY j.job_id, j.title, c.name, c.website_url, j.location
                 HAVING matching_skills > 0
-                ORDER BY match_pct DESC, matching_skills DESC, j.job_id DESC LIMIT 5""", args)
+                ORDER BY match_pct DESC, matching_skills DESC, j.job_id DESC{limit_clause}""", args)
         return cur.fetchall()
 
 
@@ -1009,32 +1030,37 @@ def get_admin_overview():
         return {'counts': counts, 'users': users, 'runs': runs, 'database': 'ok'}
 
 
-def add_resume_skill_to_profile(user_id, flag_id):
-    """Add resume skill to profile."""
+def add_resume_skills_to_profile(user_id, flag_ids):
+    """Add an owner-selected batch atomically without overwriting existing skills."""
     with get_connection() as conn:
         try:
             cur = conn.cursor(dictionary=True)
-            cur.execute('SELECT user_id FROM Users WHERE user_id = %s FOR UPDATE', (user_id,))
+            cur.execute('SELECT user_id FROM Users WHERE user_id=%s FOR UPDATE', (user_id,))
             if not cur.fetchone():
-                return False
-            cur.execute('SELECT * FROM Unmatched_Skills WHERE unmatched_id = %s AND user_id = %s FOR UPDATE', (flag_id, user_id))
-            flag = cur.fetchone()
-            if not flag or flag['status'] == 'rejected':
+                return None
+            placeholders = ','.join(['%s'] * len(flag_ids))
+            cur.execute(f'SELECT * FROM Unmatched_Skills WHERE user_id=%s AND unmatched_id IN ({placeholders}) FOR UPDATE', [user_id, *flag_ids])
+            flags = cur.fetchall()
+            if len(flags) != len(flag_ids) or any(flag['status'] == 'rejected' for flag in flags):
                 conn.rollback()
-                return False
-            cur.execute("INSERT INTO Skills (skill_name, skill_type) VALUES (%s, 'technical') ON DUPLICATE KEY UPDATE skill_name = skill_name", (flag['skill_name'],))
-            cur.execute('SELECT skill_id FROM Skills WHERE LOWER(TRIM(skill_name)) = %s', (flag['skill_name'].strip().lower(),))
-            skill_id = cur.fetchone()['skill_id']
-            cur.execute('INSERT IGNORE INTO User_Skills (user_id, skill_id) VALUES (%s, %s)', (user_id, skill_id))
-            cur.execute('SELECT s.skill_name FROM User_Skills us JOIN Skills s ON s.skill_id = us.skill_id WHERE us.user_id = %s ORDER BY s.skill_name', (user_id,))
+                return None
+            for flag in flags:
+                cur.execute("INSERT INTO Skills (skill_name, skill_type) VALUES (%s, 'technical') ON DUPLICATE KEY UPDATE skill_name=skill_name", (flag['skill_name'],))
+                cur.execute('SELECT skill_id FROM Skills WHERE LOWER(TRIM(skill_name))=%s', (flag['skill_name'].strip().lower(),))
+                cur.execute('INSERT IGNORE INTO User_Skills (user_id, skill_id) VALUES (%s,%s)', (user_id, cur.fetchone()['skill_id']))
+                cur.execute("UPDATE Unmatched_Skills SET status='approved', reviewed_by=%s, reviewed_at=CURRENT_TIMESTAMP WHERE unmatched_id=%s", (user_id, flag['unmatched_id']))
+            cur.execute('SELECT s.skill_name FROM User_Skills us JOIN Skills s ON s.skill_id=us.skill_id WHERE us.user_id=%s ORDER BY s.skill_name', (user_id,))
             names = [row['skill_name'] for row in cur.fetchall()]
-            cur.execute('UPDATE Users SET skills = %s WHERE user_id = %s', (','.join(names), user_id))
-            cur.execute("UPDATE Unmatched_Skills SET status = 'approved', reviewed_by = %s, reviewed_at = CURRENT_TIMESTAMP WHERE unmatched_id = %s", (user_id, flag_id))
+            cur.execute('UPDATE Users SET skills=%s WHERE user_id=%s', (','.join(names), user_id))
             conn.commit()
-            return True
+            return [flag['skill_name'] for flag in flags]
         except Exception:
             conn.rollback()
             raise
+
+
+def add_resume_skill_to_profile(user_id, flag_id):
+    return add_resume_skills_to_profile(user_id, [flag_id]) is not None
 
 
 def save_resume(user_id, filename, content, skills):
@@ -1062,37 +1088,73 @@ def get_saved_resume(user_id, include_content=False):
         return row
 
 
-def add_resume_matches(user_id, jobs):
+def add_resume_matches(user_id, jobs, profile_override=None):
     """Compare required skills with saved resume skills, falling back to the profile."""
     if not jobs:
         return jobs
-    resume = get_saved_resume(user_id)
-    source = 'resume' if resume else 'profile'
-    saved_skills = resume.get('skills', []) if resume else get_user_skills(user_id)
-    if not resume and not saved_skills:
-        user = get_user_by_id(user_id)
-        saved_skills = (user.get('skills') or '').split(',') if user else []
+    if profile_override is not None:
+        source, saved_skills = 'profile', profile_override
+    else:
+        resume = get_saved_resume(user_id)
+        source = 'resume' if resume else 'profile'
+        saved_skills = resume.get('skills', []) if resume else get_user_skills(user_id)
+        if not resume and not saved_skills:
+            user = get_user_by_id(user_id)
+            saved_skills = (user.get('skills') or '').split(',') if user else []
     skills = {str(skill).strip().lower() for skill in saved_skills if str(skill).strip()}
     ids = list(dict.fromkeys(job['job_id'] for job in jobs))
     required = {job_id: set() for job_id in ids}
+    html_by_job = {}
     with get_connection() as conn:
         cur = conn.cursor(dictionary=True)
         placeholders = ','.join(['%s'] * len(ids))
-        cur.execute(f'''SELECT js.job_id, s.skill_name FROM Job_Skills js
+        cur.execute(f'''SELECT js.job_id, s.skill_name, j.description_html FROM Job_Skills js
             JOIN Skills s ON s.skill_id = js.skill_id
+            JOIN Jobs j ON j.job_id=js.job_id
             WHERE js.requirement_type = 'required' AND js.job_id IN ({placeholders})''', ids)
         for row in cur.fetchall():
             required[row['job_id']].add(row['skill_name'].strip().lower())
+            html_by_job[row['job_id']] = row.get('description_html')
     result = []
     for job in jobs:
-        total = len(required[job['job_id']])
-        matched = len(required[job['job_id']] & skills)
-        result.append({**job, 'resume_match_pct': round(100 * matched / total) if total else None,
+        needed = required[job['job_id']]
+        groups = [{skill} for skill in sorted(needed)]
+        extraction_source = 'text_fallback'
+        if html_by_job.get(job['job_id']):
+            from nlp_tagger import analyze_job_skills
+            analysis = analyze_job_skills('', html_by_job[job['job_id']])
+            if analysis['source'] == 'qualification_html':
+                extraction_source = analysis['source']
+                # Do not include new HTML tags until a job has been retagged.
+                candidates = [set(group) & needed for group in analysis['required_groups']]
+                groups = [group for group in candidates if group]
+                covered = set().union(*groups) if groups else set()
+                groups += [{skill} for skill in sorted(needed - covered)]
+        outcomes, matched_skills, partial_skills, missing_skills = [], set(), set(), set()
+        for group in groups:
+            hits = group & skills
+            partial = not hits and 'sql server' in group and 'sql' in skills
+            status = 'matched' if hits else 'partial' if partial else 'missing'
+            outcomes.append({'skills': sorted(group), 'status': status})
+            if hits:
+                matched_skills.update(hits)
+            elif partial:
+                partial_skills.add('sql server')
+            else:
+                missing_skills.update(group)
+        total = len(groups)
+        matched = sum(outcome['status'] == 'matched' for outcome in outcomes)
+        partial_count = sum(outcome['status'] == 'partial' for outcome in outcomes)
+        credit = matched + 0.5 * partial_count
+        result.append({**job, 'resume_match_pct': round(100 * credit / total) if total else None,
                        'resume_match_status': 'ready' if total else 'no_requirements',
                        'resume_match_source': source,
                        'resume_matched_count': matched, 'resume_required_count': total,
-                       'resume_matched_skills': sorted(required[job['job_id']] & skills),
-                       'resume_missing_skills': sorted(required[job['job_id']] - skills)})
+                       'resume_matched_skills': sorted(matched_skills),
+                       'resume_partial_skills': sorted(partial_skills),
+                       'resume_partial_count': partial_count, 'resume_partial_credit': 0.5,
+                       'resume_missing_skills': sorted(missing_skills),
+                       'resume_requirement_groups': outcomes, 'resume_extraction_source': extraction_source})
     return result
 
 
@@ -1188,3 +1250,51 @@ def restore_hidden_jobs(user_id):
         count = cur.rowcount
         conn.commit()
         return count
+
+
+def restore_resume_skill(user_id, flag_id):
+    """Undo this owner's dismissal; never undo an administrator's review."""
+    with get_connection() as conn:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT skill_name FROM Unmatched_Skills WHERE unmatched_id=%s AND user_id=%s AND status='rejected' AND reviewed_by=%s FOR UPDATE", (flag_id, user_id, user_id))
+        flag = cur.fetchone()
+        if not flag:
+            conn.rollback()
+            return False
+        cur.execute("SELECT unmatched_id FROM Unmatched_Skills WHERE user_id=%s AND LOWER(skill_name)=LOWER(%s) AND status='pending'", (user_id, flag['skill_name']))
+        if not cur.fetchone():
+            cur.execute("UPDATE Unmatched_Skills SET status='pending', reviewed_by=NULL, reviewed_at=NULL WHERE unmatched_id=%s", (flag_id,))
+        conn.commit()
+        return True
+
+
+def flagged_skill_impact(user_id, flag_ids=None, discipline=None):
+    """Estimate profile-only matches across fresh active jobs using card scoring."""
+    flags = get_flagged_skills(user_id)
+    wanted = set(flag_ids) if flag_ids is not None else {flag['unmatched_id'] for flag in flags}
+    chosen = [flag for flag in flags if flag['unmatched_id'] in wanted]
+    profile = get_user_skills(user_id)
+    if not profile:
+        user = get_user_by_id(user_id)
+        profile = (user.get('skills') or '').split(',') if user else []
+    focus = ' AND LOWER(title) REGEXP %s' if discipline in DISCIPLINE_PATTERNS else ''
+    with get_connection() as conn:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT job_id FROM Jobs WHERE is_active=1 AND (closing_date IS NULL OR closing_date>=CURDATE()) AND (date_posted IS NULL OR date_posted>=DATE_SUB(CURDATE(), INTERVAL 6 MONTH))" + focus, (DISCIPLINE_PATTERNS[discipline],) if focus else ())
+        jobs = cur.fetchall()
+    before = add_resume_matches(user_id, jobs, profile_override=profile)
+    after = add_resume_matches(user_id, jobs, profile_override=[*profile, *(flag['skill_name'] for flag in chosen)])
+    valid_before = [job for job in before if job['resume_required_count']]
+    valid_after = [job for job in after if job['resume_required_count']]
+    counts = {}
+    for flag in flags:
+        name = flag['skill_name'].strip().lower()
+        counts[str(flag['unmatched_id'])] = sum(any(name in group['skills'] for group in job['resume_requirement_groups']) for job in valid_before)
+    market_before = get_student_skill_gap_summary(user_id, discipline, profile_override=profile)
+    market_after = get_student_skill_gap_summary(user_id, discipline, profile_override=[*profile, *(flag['skill_name'] for flag in chosen)])
+    return {'current_market_match': market_before.get('overall_match_pct'),
+            'projected_market_match': market_after.get('overall_match_pct'),
+            'job_count': len(valid_before),
+            'current_average': round(sum(job['resume_match_pct'] for job in valid_before) / len(valid_before), 1) if valid_before else None,
+            'projected_average': round(sum(job['resume_match_pct'] for job in valid_after) / len(valid_after), 1) if valid_after else None,
+            'skill_job_counts': counts, 'has_saved_resume': bool(get_saved_resume(user_id)), 'selected_count': len(chosen)}

@@ -3,7 +3,7 @@ body { margin: 0; color: #1f2937; }
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .65; }
-:focus-visible { outline: 1px solid #94a3b8; outline-offset: 2px; }
+:focus-visible { outline: 3px solid #1d4ed8; outline-offset: 3px; }
 .resume-panel { background: #fff; border: 1px solid #e5e7eb; box-shadow: 0 1px 4px rgba(0,0,0,0.08); border-radius: 12px; padding: 20px; margin: 20px 0; }
 .resume-panel h3 { color: #1e3a8a; margin-top: 0; }
 .resume-panel p { line-height: 1.5; }
@@ -31,7 +31,7 @@ h1, h2 { color: #1e3a8a; }
 .approve-button { background: #15803d; }
 .reject-button { background: #b91c1c; }
 
-.auth-layout { --auth-label-width: 30%; max-width: 880px; margin: 32px auto 64px; padding: 0 32px; }
+.auth-layout { --auth-label-width: 34%; width: 100%; max-width: 760px; margin: 0 auto 64px; padding: 72px 24px 0; }
 .auth-brand-row { margin-bottom: 34px; }
 .auth-brand { display: inline-flex; align-items: center; justify-content: center; min-height: 56px; padding: 12px 20px; background: #1e3a8a; color: #93c5fd; border: 0; border-radius: 8px; font-size: 22px; font-weight: 800; }
 .auth-title { text-align: center; font-size: 34px; line-height: 1.2; margin: 0 0 48px; }
@@ -46,15 +46,20 @@ h1, h2 { color: #1e3a8a; }
 .auth-links { font-size: 16px; line-height: 1.5; }
 .auth-links p { margin: 0 0 12px; }
 .auth-links .text-button { color: #1e40af; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
-.auth-layout--register { --auth-label-width: 37%; }
-.auth-layout--register .auth-form { row-gap: 36px; }
-.auth-layout--register .auth-title { margin-bottom: 54px; }
+.auth-layout--register { --auth-label-width: 34%; }
+.auth-layout--register .auth-form { row-gap: 24px; }
+.auth-layout--register .auth-title { margin-bottom: 48px; }
 .auth-layout--register .auth-submit { width: 290px; }
 .auth-layout--register .auth-links { margin-top: 8px; }
-.auth-password-strength { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 18px; margin-top: 12px; color: #6b7280; font-size: 12px; }
-.auth-password-strength meter { width: 70px; height: 12px; }
+.auth-password-strength { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-height: 18px; margin-top: 6px; color: #6b7280; font-size: 12px; }
+.auth-password-strength { --strength-color: #DC2626; }
+.auth-password-strength[data-strength="medium"] { --strength-color: #D97706; }
+.auth-password-strength[data-strength="strong"] { --strength-color: #16A34A; }
+.auth-strength-meter { width: 70px; height: 8px; overflow: hidden; border-radius: 4px; background: #e5e7eb; }
+.auth-strength-meter > span { display: block; height: 100%; background: var(--strength-color); }
+.auth-strength-label { color: var(--strength-color); font-weight: 600; }
 @media (max-width: 600px) {
-  .auth-layout { margin: 12px auto 40px; padding: 0 4px; }
+  .auth-layout { margin: 0 auto 40px; padding: 72px 4px 0; }
   .auth-brand-row { margin-bottom: 32px; }
   .auth-title { font-size: 30px; margin-bottom: 32px; }
   .auth-form, .auth-layout--register .auth-form { grid-template-columns: minmax(0, 1fr); row-gap: 24px; }
@@ -721,12 +726,12 @@ body,.app-shell { background:#eef6ff; }
 .wf-page .nova-job-search-input input#job-search:focus,
 .wf-page .nova-job-search-input input#job-search:focus-visible {
  border:0;
- outline:none!important;
+ outline:none;
  box-shadow:none;
  background:transparent;
 }
 .wf-page .nova-job-search-input input#job-search:focus-visible {
- outline:1px solid #94a3b8!important;
+ outline:3px solid #1d4ed8;
  outline-offset:2px;
  border-radius:6px;
 }
@@ -827,7 +832,6 @@ body,.app-shell { background:#eef6ff; }
 .nova-theme-toggle { position:static; flex-shrink:0; width:40px; height:40px; box-shadow:none; }
 .nova-nav .nova-theme-toggle { background:#ffffff0d; border-color:#ffffff38; color:white; }
 .nova-nav .nova-theme-toggle:hover { background:#ffffff20; }
-.nova-auth-theme { display:flex; justify-content:flex-end; }
 
 /* Consistent hover transitions for buttons and button-style links. */
 .app-shell button,.app-shell a.primary-button {
@@ -885,7 +889,7 @@ body,.app-shell { background:#eef6ff; }
 [data-theme=dark] .nova-missing-job-skills>div>span { background:#253b5b; color:#c4daff; }
 
 .nova-mobile-menu { display:none; }
-@media(max-width:700px) {
+@media(max-width:768px) {
  .nova-nav { align-items:center; }
  .nova-mobile-menu { display:grid; place-items:center; margin-left:auto; width:44px; height:44px; border:1px solid #ffffff40; border-radius:12px; background:#ffffff0d; color:white; }
  .nova-nav .nova-nav-links,.nova-nav .nova-nav-account { display:none; }
@@ -897,3 +901,328 @@ body,.app-shell { background:#eef6ff; }
 .nova-application-card-status { color:#475569; font-size:12px; font-weight:600; }
 .nova-listing-actions { flex-wrap:wrap; justify-content:flex-end; }
 [data-theme=dark] .nova-application-card-status { color:#b7c5da; }
+
+.nova-job-freshness { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0; color: var(--nova-muted, #64748b); font-size: 12px; }
+.nova-job-unavailable { color: #b45309; font-weight: 600; }
+
+.job-description-content { font-family: inherit; font-size: 15px; line-height: 1.8; color: #334155; }
+.job-description-content p, .job-description-content ul { max-width: 72ch; }
+.job-description-content ul { margin: 0 0 20px; padding-left: 24px; }
+.job-description-content li { margin-bottom: 10px; padding-left: 4px; }
+.job-description-content h3 { font-size: 16px; line-height: 1.5; margin-top: 24px; }
+[data-theme=dark] .job-description-content h3 { color: #bfdbfe; }
+
+.job-description-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 22px; }
+.job-description-nav a { padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; color: inherit; font-size: 13px; text-decoration: none; }
+.job-description-nav a:hover { background: #e2e8f0; color: #1e3a8a; }
+.job-description-section { scroll-margin-top: 110px; }
+.job-original-posting { margin: 24px 0; }
+.job-original-posting summary { cursor: pointer; font-weight: 600; margin-bottom: 14px; }
+
+/* Compact job filters and readable supporting text. */
+.nova-filter-panel[hidden] { display:none!important; }
+.nova-filter-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin:14px 0 22px; }
+.nova-filter-toolbar>span { color:#475569; font-size:13px; }
+.nova-jobs-subtitle { color:#475569; margin-bottom:20px; }
+.nova-filter-panel .nova-filter-pill[aria-pressed=true] { background:#1d4ed8; border-color:#1d4ed8; color:#fff; }
+.nova-filter-panel .wf-inline>input:not([type=checkbox]),.nova-filter-panel .wf-inline>select,.nova-filter-panel .nova-skill-select summary { border:1px solid #dce5ef; }
+.nova-nav-chat>.nova-nav-tab { border:1px solid #ffffff38; border-radius:999px; background:#ffffff08; }
+.nova-nav-chat>.nova-nav-tab:hover { border-color:#ffffff70; background:#ffffff18; }
+.wf-page :is(input,textarea)::placeholder { color:#475569; opacity:1; }
+.wf-page :is(.wf-muted,.wf-overview dd,.nova-results-title p,.nova-filter-title p,.nova-filter-footer>span) { color:#475569; }
+[data-theme=dark] :is(.nova-filter-toolbar>span,.nova-jobs-subtitle,.wf-page .wf-overview dd) { color:#b7c5da; }
+[data-theme=dark] .wf-page :is(input,textarea)::placeholder { color:#b7c5da; }
+[data-theme=dark] .nova-filter-panel .nova-filter-pill[aria-pressed=true] { background:#1d4ed8!important; border-color:#93c5fd!important; color:#fff!important; }
+
+.nova-required-job-skills { margin-top:12px; }
+.nova-required-job-skills>span { font-size:12px; font-weight:600; color:#475569; }
+.nova-required-job-skills .nova-job-skill-chips>span.is-missing { color:#9a3412; background:#fff7ed; border:1px solid #fdba74; }
+.nova-required-job-skills small { font-size:inherit; font-weight:600; }
+[data-theme=dark] .nova-required-job-skills>span { color:#b7c5da; }
+[data-theme=dark] .nova-required-job-skills .nova-job-skill-chips>span.is-missing { color:#fed7aa!important; background:#431407!important; border-color:#c2410c!important; }
+
+/* Compact cards keep the job itself prominent. */
+.nova-modern-job { cursor:pointer; padding:16px 18px; }
+.nova-modern-job:hover { border-color:#93b4f5; }
+.nova-modern-job:focus-within { outline:2px solid #2563eb; outline-offset:2px; }
+.nova-modern-job .nova-card-match { margin-top:6px; }
+.nova-required-job-skills { margin-top:8px; }
+.nova-required-job-skills .nova-job-skill-chips { margin-top:5px; }
+.nova-job-skill-chips .nova-more-skills { border:1px solid #cbd5e1; border-radius:999px; padding:5px 10px; color:#1e40af; background:#eff6ff; font-size:12px; }
+.nova-modern-job-footer { margin-top:10px; padding-top:10px; }
+.nova-job-metadata { display:flex; align-items:center; gap:8px 12px; flex-wrap:wrap; flex:1; }
+.nova-posted-date { font-size:12px; color:#475569; }
+.nova-job-metadata .nova-job-freshness { margin:0; }
+.nova-listing-actions { display:flex; align-items:center; gap:8px; }
+.nova-apply-button { border-color:#cbd5e1; border-radius:999px; padding:8px 16px; text-decoration:none; font-size:13px; font-weight:600; }
+.nova-resume-match.is-high { color:#065f46; background:#d1fae5; }
+.nova-resume-match.is-medium { color:#92400e; background:#fef3c7; }
+.nova-resume-match.is-low { color:#991b1b; background:#fee2e2; }
+[data-theme=dark] .nova-posted-date { color:#b7c5da; }
+[data-theme=dark] .nova-more-skills { color:#bfdbfe; background:#1e2e45; border-color:#3b4e68; }
+[data-theme=dark] .nova-resume-match.is-high { color:#a7f3d0; background:#064e3b; }
+[data-theme=dark] .nova-resume-match.is-medium { color:#fde68a; background:#78350f; }
+[data-theme=dark] .nova-resume-match.is-low { color:#fecaca; background:#7f1d1d; }
+
+.nova-skill-group { margin-top:5px; }
+.nova-skill-group-label { font-size:12px; font-weight:600; color:#475569; }
+.nova-required-job-skills>.nova-more-skills { margin-top:7px; border:1px solid #cbd5e1; border-radius:999px; padding:5px 10px; color:#1e40af; background:#eff6ff; font-size:12px; }
+[data-theme=dark] .nova-skill-group-label { color:#b7c5da; }
+[data-theme=dark] .nova-required-job-skills>.nova-more-skills { color:#bfdbfe; background:#1e2e45; border-color:#3b4e68; }
+
+.nova-required-job-skills .nova-job-skill-chips>span.is-partial { color:#1e40af; background:#eff6ff; border:1px dashed #60a5fa; }
+[data-theme=dark] .nova-required-job-skills .nova-job-skill-chips>span.is-partial { color:#bfdbfe!important; background:#172554!important; border-color:#60a5fa!important; }
+
+/* Shared listing cards and dashboard entry points. */
+.nova-job-card-header { display:flex; align-items:flex-start; gap:12px; }
+.nova-job-card-identity { flex:1; min-width:0; }
+.nova-job-card-identity h3 { margin:0; font-size:17px; }
+.nova-job-card-identity p { margin:4px 0 0; color:#374151; font-size:14px; }
+.nova-job-card-actions { display:flex; align-items:flex-start; gap:6px; flex-shrink:0; }
+.nova-job-card-actions .nova-hide-job { padding:10px 0 10px 4px; font-size:12px; }
+.nova-job-card-identity .nova-perfect-match { font-size:12px; color:#065f46; }
+.nova-job-salary { background:#d1fae5; color:#065f46; border-radius:999px; padding:3px 10px; font-size:12px; font-weight:600; }
+.nova-stat-link { text-align:left; cursor:pointer; font:inherit; }
+.nova-stat-link:hover { border-color:#2563eb; }
+.nova-stat-link small { display:block; color:#475569; margin-top:8px; font-size:13px; }
+.nova-stat-link progress { width:100%; height:8px; accent-color:#2563eb; margin-top:10px; }
+.nova-dashboard-applications,.nova-dashboard-job-lists>section { scroll-margin-top:110px; }
+.nova-dashboard-job-lists .nova-modern-job { margin-bottom:12px; }
+.nova-dashboard-job-lists>section { padding:16px; }
+.nova-application-summary { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; padding:12px 0; border-top:1px solid #e2e8f0; }
+.nova-application-summary>div { min-width:0; flex:1; }
+.nova-application-summary p { margin:4px 0; color:#475569; font-size:13px; }
+.nova-application-summary label { display:flex; gap:8px; align-items:center; font-size:12px; }
+.nova-application-summary select { max-width:100%; }
+[data-theme=dark] :is(.nova-job-card-identity p,.nova-stat-link small,.nova-application-summary p) { color:#b7c5da; }
+[data-theme=dark] .nova-job-card-identity .nova-perfect-match { color:#a7f3d0; }
+@media(max-width:480px) { .nova-job-card-actions { flex-direction:column; align-items:center; gap:0; } .nova-job-card-actions .nova-hide-job { padding:4px; } }
+
+/* Compact skill comparisons and an obvious card detail action. */
+.nova-required-job-skills { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px 14px; }
+.nova-required-job-skills .nova-skill-group { margin:0; min-width:0; }
+.nova-skill-group.is-matched-group { grid-column:1; grid-row:1; }
+.nova-skill-group.is-missing-group { grid-column:2; grid-row:1; }
+.nova-skill-group.is-partial-group { grid-column:1; grid-row:2; }
+.nova-required-job-skills>.nova-more-skills { grid-column:1 / -1; justify-self:start; margin-top:0; }
+.nova-job-card-aside { display:flex; flex-direction:row; align-items:center; gap:8px; flex-shrink:0; }
+.nova-modern-job { transition:border-color .15s,box-shadow .15s; }
+.nova-modern-job:hover { box-shadow:0 3px 14px #2563eb18; }
+.nova-modern-job .wf-job-title::after { content:none; }
+.nova-location-toggle>button { color:inherit; font-size:inherit; font-weight:inherit; text-align:left; text-decoration:underline dotted; text-underline-offset:3px; }
+.nova-full-location-list { display:block; margin-top:4px; font-size:12px; line-height:1.5; }
+@media(max-width:480px) {
+ .nova-job-card-header { flex-wrap:wrap; gap:8px; }
+ .nova-job-card-identity { flex-basis:calc(100% - 52px); }
+ .nova-job-card-aside { flex-basis:100%; flex-direction:row; align-items:center; justify-content:space-between; }
+ .nova-required-job-skills { gap:6px 8px; }
+}
+[data-theme=dark] .nova-modern-job .wf-job-title::after { color:#b7c5da; }
+
+.nova-job-card-actions { align-items:center; }
+.nova-salary-unlisted { font-size:12px; color:#475569; }
+[data-theme=dark] .nova-salary-unlisted { color:#b7c5da; }
+@media(max-width:480px) {
+ .nova-required-job-skills { grid-template-columns:minmax(0,1fr); }
+ .nova-required-job-skills .nova-skill-group { grid-column:auto; grid-row:auto; }
+ .nova-job-card-actions { flex-direction:row; }
+}
+
+.nova-detail-back { display:inline-flex; margin:0 0 18px; padding:8px 0; }
+
+/* Review detected skills in compact, selectable cards. */
+.nova-flagged-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.nova-flagged-grid .pending-skill { position:relative; display:flex; align-items:stretch; margin:0; padding:0; min-width:0; transition:opacity .18s,transform .18s; }
+.nova-flagged-grid .pending-skill.is-selected { border-color:#2563eb; background:#eff6ff; box-shadow:inset 0 0 0 1px #2563eb; color:#1e40af; }
+.nova-flagged-grid .pending-skill:focus-within { outline:2px solid #2563eb; outline-offset:2px; }
+.nova-flagged-grid .pending-skill.is-leaving { opacity:0; transform:translateY(-5px); }
+.nova-flagged-grid .nova-flagged-choice { display:flex; align-items:center; gap:8px; cursor:pointer; flex:1; min-width:0; margin:0; padding:10px 72px 10px 12px; min-height:44px; }
+.nova-flagged-choice input { width:20px; height:20px; margin:0; flex-shrink:0; accent-color:#2563eb; }
+.nova-flagged-choice>span { display:flex; flex-direction:column; gap:3px; min-width:0; }
+.nova-flagged-grid .nova-flagged-dismiss { position:absolute; right:8px; top:50%; transform:translateY(-50%); padding:10px 6px; font-size:12px; }
+[data-theme=dark] .nova-flagged-grid .pending-skill.is-selected { background:#172e52!important; border-color:#60a5fa!important; box-shadow:inset 0 0 0 1px #60a5fa; }
+.nova-flagged-choice strong { font-size:14px; line-height:1.3; }
+.nova-flagged-choice .nova-skill-relevance { color:#475569; font-size:12px; line-height:1.4; margin:0; }
+.nova-flagged-bulk { display:flex; flex-direction:column; gap:10px; margin-top:16px; padding-top:14px; border-top:1px solid #e2e8f0; }
+.nova-flagged-bulk>div:first-child { display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+.nova-flagged-bulk p { margin:0 0 4px; font-size:13px; }
+.nova-flagged-bulk small { color:#475569; line-height:1.5; }
+.nova-skill-feedback { width:fit-content; max-width:100%; color:#065f46; background:#ecfdf5; padding:10px 12px; border-radius:8px; margin-bottom:12px; font-size:13px; }
+[data-theme=dark] :is(.nova-skill-relevance,.nova-flagged-bulk small) { color:#b7c5da; }
+[data-theme=dark] .nova-skill-feedback { width:fit-content; max-width:100%; color:#a7f3d0; background:#064e3b; }
+@media(max-width:900px) { .nova-flagged-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:480px) { .nova-flagged-grid { grid-template-columns:minmax(0,1fr); } }
+@media(prefers-reduced-motion:reduce) { .nova-flagged-grid .pending-skill { transition:none; } }
+
+.auth-field-error { margin: 6px 0 0; color: #DC2626; font-size: 13px; line-height: 1.4; }
+.auth-field input[aria-invalid="true"] { border-color: #DC2626; }
+
+.auth-field:has(.auth-password-strength) { margin-bottom: -18px; }
+
+/* One transparent SVG, sized consistently across navigation and auth pages. */
+.auth-brand.nova-logo-button, .nova-nav .nova-brand.nova-logo-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #172554;
+  box-shadow: none;
+  flex-shrink: 0;
+}
+.auth-brand.nova-logo-button .nova-logo, .nova-nav .nova-logo-button .nova-logo { width: 84px; height: 63px; }
+
+/* A contrasting gap keeps keyboard focus visible on filled buttons and cards. */
+.app-shell :is(button, a, input, select, textarea, [tabindex]):focus-visible,
+.app-shell .wf-page .nova-job-search-input input#job-search:focus-visible {
+  outline: 3px solid #1d4ed8;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 3px #fff;
+}
+[data-theme=dark] .app-shell :is(button, a, input, select, textarea, [tabindex]):focus-visible,
+[data-theme=dark] .app-shell .wf-page .nova-job-search-input input#job-search:focus-visible {
+  outline-color: #93c5fd;
+  box-shadow: 0 0 0 3px #0f172a;
+}
+
+/* Restore the shared blue-to-teal navigation; logos have no background tile. */
+.nova-nav { position: sticky; top: 0; z-index: 45; background: linear-gradient(110deg, #1e40af 0%, #0369a1 55%, #0f766e 100%); padding-top: 8px; padding-bottom: 8px; }
+.nova-nav .nova-brand.nova-logo-button { color: #fff; }
+[data-theme=dark] .auth-brand.nova-logo-button { color: #fff; }
+.job-description-content p, .job-description-content ul { max-width: none; }
+.job-description-nav a { border: 0; border-radius: 0; padding: 4px 0; margin-right: 12px; color: #1e40af; text-decoration: underline; text-underline-offset: 4px; }
+.job-description-nav a:hover { background: #dbeafe; color: #172554; }
+.job-description-notice { border-left: 3px solid #94a3b8; padding: 12px 16px; margin: 24px 0; font-size: 13px; line-height: 1.6; }
+.nova-detail-skills h3 { font-size: 14px; margin: 12px 0 8px; }
+.nova-detail-match-row { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.nova-detail-match-row .wf-match-bar { flex: 1; margin: 0; }
+.nova-detail-match-row .wf-match-bar > span { background: #16A34A; }
+.nova-view-similar { color: #1e40af; text-decoration: underline; margin-top: 12px; }
+
+.nova-similar-row { display:flex; align-items:center; gap:12px; min-height:80px; padding:12px 0; border-bottom:1px solid #dbe5ef; }
+.nova-similar-row:last-of-type { border-bottom:0; }
+.nova-similar-identity { flex:1; min-width:0; }
+.nova-similar-identity h3 { font-size:15px; line-height:1.4; margin:0 0 4px; }
+.nova-similar-identity h3 button { color:#1e40af; text-align:left; text-decoration:underline; text-underline-offset:3px; }
+.nova-similar-identity p { margin:0; color:#475569; font-size:12px; line-height:1.5; }
+.nova-similar-row .nova-resume-match { flex-shrink:0; }
+.job-description-accordion { border:1px solid #dbe5ef; border-radius:12px; background:#fff; margin:12px 0; overflow:visible; }
+.job-description-accordion > summary { cursor:pointer; padding:16px 20px; font-size:16px; font-weight:600; color:#172554; border-radius:12px; }
+.job-description-accordion > summary:hover { background:#eff6ff; }
+.job-description-accordion > .job-description-content { padding:0 20px 20px; }
+.job-description-accordion .job-description-notice { margin:0 20px 16px; }
+.wf-detail-columns > .wf-overview { position:sticky; top:90px; max-height:calc(100vh - 114px); overflow:auto; }
+[data-theme=dark] .job-description-accordion { background:#1e2e45; border-color:#3b4e68; }
+[data-theme=dark] .job-description-accordion > summary { color:#dbe5f5; }
+[data-theme=dark] .job-description-accordion > summary:hover { background:#293d58; }
+[data-theme=dark] .nova-similar-identity p { color:#b7c5da; }
+[data-theme=dark] .nova-similar-identity h3 button { color:#bfdbfe; }
+.app-shell summary:focus-visible { outline:3px solid #1d4ed8; outline-offset:3px; box-shadow:0 0 0 3px #fff; }
+[data-theme=dark] .app-shell summary:focus-visible { outline-color:#93c5fd; box-shadow:0 0 0 3px #0f172a; }
+@media(max-width:900px) { .wf-detail-columns > .wf-overview { position:static; max-height:none; overflow:visible; } }
+@media(max-width:480px) { .nova-similar-row { gap:8px; } .nova-similar-row .nova-resume-match { font-size:10px; padding:4px 6px; } }
+
+/* Move the sticky header offscreen when reading, without shifting page content. */
+.nova-nav { transition: top 180ms ease; }
+.nova-nav.is-scroll-hidden { top: calc(-1 * var(--nova-nav-height, 84px)); }
+@media(prefers-reduced-motion:reduce) { .nova-nav { transition: none; } }
+
+.nova-dashboard-job-lists { align-items:start; }
+.nova-dashboard-job-lists .nova-similar-row { gap:10px; }
+.nova-dashboard-job-lists .nova-similar-identity h3 { overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.nova-dashboard-job-lists .nova-similar-identity h3 button { max-width:100%; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+.nova-dashboard-job-lists .company-logo { width:40px; height:40px; flex-basis:40px; }
+.nova-dashboard-job-lists .nova-bookmark-button,.nova-dashboard-all-jobs .nova-bookmark-button { width:36px; height:36px; }
+.nova-widget-see-all { display:inline-block; margin-top:16px; color:#1e40af; text-decoration:underline; text-underline-offset:3px; }
+[data-theme=dark] .nova-widget-see-all { color:#bfdbfe; }
+
+.nova-skill-cards { grid-template-columns:minmax(0,1fr); }
+.nova-gap-demand { display:block; margin-top:4px; font-size:12px; }
+
+.wf-page .wf-message-error { color:#DC2626; background:#FEF2F2; border-color:#FECACA; }
+[data-theme=dark] .wf-page .wf-message-error { color:#FCA5A5; background:#450A0A; border-color:#991B1B; }
+
+.nova-photo-control { display:flex; align-items:center; gap:18px; margin:0; padding:0; }
+.nova-photo-text { display:flex; flex-direction:column; align-items:flex-start; gap:6px; }
+.nova-photo-upload-link { padding:0; cursor:pointer; }
+.nova-photo-edit:hover { background:#EFF6FF; box-shadow:0 0 0 4px #DBEAFE; }
+.nova-photo-text .nova-photo-error { color:#DC2626; }
+[data-theme=dark] .nova-photo-text .nova-photo-error { color:#FCA5A5; }
+.wf-photo-row input[hidden] { display:none; }
+
+.wf-page.wf-profile { width:100%; max-width:960px; margin-left:auto; margin-right:auto; }
+.wf-profile form>section.nova-photo-card { padding-top:16px; padding-bottom:16px; }
+.wf-profile .nova-photo-card .wf-section-title { margin-top:0; margin-bottom:14px; padding-bottom:10px; }
+
+.nova-add-skill-row { display:grid; width:100%; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:8px; }
+.wf-profile .nova-add-skill-field { max-width:730px; }
+.nova-add-skill-row>input { width:100%; }
+.nova-add-skill-field>label { text-align:left; font-weight:600; }
+.wf-profile .nova-add-skill-row select { width:100%; }
+@media(max-width:540px) { .nova-add-skill-row { grid-template-columns:minmax(0,1fr) auto; } .nova-add-skill-row input { grid-column:1/-1; } }
+
+.nova-skill-level { display:flex; align-items:center; gap:6px; font-size:13px; }
+.nova-skill-level select { max-width:150px; }
+
+.wf-profile :is(input,textarea)::placeholder { color:#6B7280; opacity:1; }
+[data-theme=dark] .wf-profile :is(input,textarea)::placeholder { color:#94A3B8; opacity:1; }
+
+.nova-email-row { display:flex; align-items:center; gap:12px; }
+.nova-email-row input { flex:1; min-width:0; width:100%; }
+.nova-email-row button { flex-shrink:0; white-space:nowrap; padding:8px 0; }
+
+.nova-experience-description { width:66.666%; }
+@media(max-width:700px) { .nova-experience-description { width:100%; } }
+
+.nova-reminder-row { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:12px 0; border-top:1px solid #E2E8F0; }
+.nova-reminder-row>div { display:flex; flex-direction:column; align-items:flex-start; gap:4px; }
+.nova-reminder-row time { white-space:nowrap; color:#92400E; }
+
+.nova-reminder-editor { margin:16px 0; }
+.nova-reminder-editor label { display:flex; flex-direction:column; gap:6px; margin:12px 0; }
+
+.home-hero-actions { display:flex; justify-content:center; flex-wrap:wrap; gap:12px; margin-top:28px; }
+.home-page .home-start-note { margin-top:24px; }
+.home-page>section.home-stats { display:flex; justify-content:center; gap:64px; padding:18px 24px; }
+.home-stats>div { display:flex; align-items:center; gap:10px; }
+.home-stats strong { font-size:24px; color:#1E40AF; }
+.home-stats span { font-size:14px; }
+.home-actions { align-items:stretch; }
+.home-section-header { display:flex; justify-content:space-between; align-items:center; gap:16px; }
+.home-student-jobs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+.home-student-jobs .nova-modern-job { display:flex; flex-direction:column; }
+.home-student-jobs .nova-modern-job-footer { margin-top:auto; }
+.home-page>section.home-closing { display:flex; align-items:center; justify-content:space-between; gap:20px; background:#EFF6FF; }
+@media(max-width:900px) { .home-student-jobs { grid-template-columns:1fr; } .home-page>section.home-stats { gap:24px; flex-wrap:wrap; } }
+@media(max-width:540px) { .home-section-header,.home-page>section.home-closing { align-items:flex-start; flex-direction:column; } }
+
+.home-eyebrow { color:#2563EB; }
+.home-student-jobs .wf-job-title { font-size:16px; line-height:1.4; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.home-student-jobs .nova-job-card-header { flex-wrap:wrap; }
+.home-student-jobs .nova-job-card-identity { min-width:0; }
+.home-student-jobs .nova-job-card-identity>p { font-size:12px; line-height:1.5; }
+.home-student-jobs .nova-required-job-skills { margin-bottom:18px; }
+.nova-required-job-skills.is-single-group .nova-skill-group { grid-column:1/-1; }
+.home-student-jobs .nova-resume-match:is(.is-low,.is-medium) { color:#92400E; background:#FEF3C7; }
+.home-closing h2 { margin:0 0 8px; }
+.home-closing p { margin:0; font-size:14px; }
+.home-page .home-careers>div>button { border:1px solid #BFDBFE; border-radius:999px; padding:9px 13px; background:#EFF6FF; color:#1E40AF; font-size:12px; font-weight:600; cursor:pointer; }
+.home-page .home-careers>div>button:hover { background:#DBEAFE; }
+
+.home-page h1 { font-size:clamp(2rem,7vw,3.5rem); }
+.home-description { font-size:clamp(1rem,2.5vw,1.25rem); }
+@media(max-width:768px) {
+ .home-actions,.home-student-jobs { grid-template-columns:1fr; }
+ .home-page { padding-top:20px; }
+ .home-intro { margin-bottom:24px; }
+ .home-page>section.home-stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; padding:14px 12px; }
+ .home-stats>div { flex-direction:column; gap:4px; text-align:center; }
+ .home-stats span { font-size:12px; }
+}
+@media(max-width:480px) {
+ .home-hero-actions { flex-direction:column; gap:10px; margin-top:24px; }
+ .home-hero-actions>button { width:100%; }
+ .home-page .home-start-note { margin-top:18px; }
+}

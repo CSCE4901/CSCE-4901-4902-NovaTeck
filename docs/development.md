@@ -67,3 +67,26 @@ message; rate limits show a retry message.
 Authenticated users submit requests through the footer or Profile Account Settings.
 Migration `007_support_requests.sql` stores requests in MySQL. Admins view the latest
 200 requests in Support Inbox and can resolve or reopen them. No email service is used.
+
+## Structured employer descriptions
+
+Run migration `012_description_html.sql` through `backend/migrate.py` before starting the updated API. Greenhouse and Lever descriptions are preserved as HTML and sanitized with nh3 before storage. Links allow only HTTP, HTTPS, and mailto, use safe rel attributes, and resolve relative URLs against the source posting. The detail API re-sanitizes HTML and computes `description_sections` from actual heading elements or bold-only paragraphs. No phrase matching or employer/role classification is performed. Source headings become card titles in their original order; unheaded content remains together. The old `description` is retained for plain-text fallback and skill processing.
+
+Backfill every existing job from the configured, reviewed hiring-board APIs:
+
+```sh
+python3.13 backend/backfill_descriptions.py --apply
+```
+
+Omit `--apply` for a report without database writes. Requests share the crawler's robots policy, redirect restrictions, and rate limits; a board is fetched once for its jobs. Missing listings, denied policies, failed requests, and unsupported sources retain plain-text fallback. The summary reports recovered, missing, failed, unsupported, and headingless records. This does not create jobs, reactivate removed jobs, or modify applications. Raw real-world regression fixtures from both platforms live in `backend/tests/fixtures/job_html`, with source provenance JSON. Refresh fixtures intentionally with `--fixtures-dir backend/tests/fixtures/job_html` and review the changes. Regular sync logs HTML coverage and headingless-posting counts to detect source changes.
+
+
+### Qualification-aware skill tagging
+
+The extractor uses actual qualification headings and individual employer bullets when it recognizes them; otherwise it keeps the existing text fallback. Display card headings are never inferred. The vocabulary includes the technologies in the checked CoreWeave qualification fixtures. Required and preferred tags stay separate, and explicit alternatives such as “React or Next.js” count as one extracted requirement for resume/profile matching. Generic SQL earns half credit toward SQL Server; it does not establish platform experience.
+
+Scores compare extracted skill requirements, not all role qualifications or years of experience. The match badge shows the matched/total count. Retagging can change scores by changing that denominator.
+
+After an extractor update, compare existing tags with `python3.13 backend/retag_job_skills.py`. Apply with `--apply --backup /tmp/novateck-old-skill-tags.json`. Each job's replacement is transactional; a failed job keeps its old tags. Future syncs retag even when the saved plain text has not changed.
+
+Job alerts and reminders are in-app only, in the Dashboard. The email worker is disabled. Saved-job deadlines and follow-up dates are editable with Set reminder dates (migration 014). Alerts refresh on focus and every minute. New-job alerts use profile skills and career/location/work-type/salary preferences; they require at least 50% match and three extracted requirements and exclude saved, hidden and applied jobs.

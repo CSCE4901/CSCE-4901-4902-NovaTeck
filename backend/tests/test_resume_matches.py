@@ -55,3 +55,32 @@ class ResumeMatchTests(unittest.TestCase):
             result = db.add_resume_matches(7, [{'job_id': 1}])
         self.assertEqual(result[0]['resume_match_pct'], 0)
         self.assertEqual(result[0]['resume_match_status'], 'ready')
+
+    def test_generic_sql_earns_partial_sql_server_credit(self):
+        connection = MagicMock()
+        connection.cursor.return_value.fetchall.return_value = [
+            {'job_id': 1, 'skill_name': 'SQL'}, {'job_id': 1, 'skill_name': 'SQL Server'}]
+        for skills, percentage, partial in [(['SQL'], 75, ['sql server']), (['SQL', 'SQL Server'], 100, []), ([], 0, [])]:
+            with self.subTest(skills=skills), patch.object(db, 'get_saved_resume', return_value={'skills': skills}), patch.object(db, 'get_connection') as context:
+                context.return_value.__enter__.return_value = connection
+                result = db.add_resume_matches(7, [{'job_id': 1}])[0]
+                self.assertEqual(result['resume_match_pct'], percentage)
+                self.assertEqual(result['resume_partial_skills'], partial)
+                if partial:
+                    self.assertNotIn('sql server', result['resume_missing_skills'])
+                    self.assertNotIn('sql server', result['resume_matched_skills'])
+                    self.assertEqual(result['resume_partial_count'], 1)
+
+    def test_one_alternative_satisfies_a_group_without_penalty_for_the_other(self):
+        connection = MagicMock()
+        html = '<h2>Requirements</h2><p>React or Angular</p><p>SQL required</p>'
+        connection.cursor.return_value.fetchall.return_value = [
+            {'job_id': 1, 'skill_name': skill, 'description_html': html} for skill in ['React', 'Angular', 'SQL']]
+        with patch.object(db, 'get_saved_resume', return_value={'skills': ['React', 'SQL']}), patch.object(db, 'get_connection') as context:
+            context.return_value.__enter__.return_value = connection
+            result = db.add_resume_matches(7, [{'job_id': 1}])[0]
+        self.assertEqual(result['resume_match_pct'], 100)
+        self.assertEqual(result['resume_required_count'], 2)
+        self.assertEqual(result['resume_matched_count'], 2)
+        self.assertEqual(result['resume_missing_skills'], [])
+        self.assertEqual(result['resume_extraction_source'], 'qualification_html')

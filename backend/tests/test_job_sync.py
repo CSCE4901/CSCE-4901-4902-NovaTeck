@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from job_sync import CompanySource, PublicCompanyFeeds, is_dfw, closing_date, SyncSettings, format_salary, is_tech_job, lever_description, normalize_listing, parse_posted_date
+from job_sync import description_text, CompanySource, PublicCompanyFeeds, is_dfw, closing_date, SyncSettings, format_salary, is_tech_job, lever_description, normalize_listing, parse_posted_date
 
 
 class JobSyncNormalizationTests(unittest.TestCase):
@@ -22,6 +22,11 @@ class JobSyncNormalizationTests(unittest.TestCase):
         listing["offices"][0]["location"] = "Dallas, TX"
         with patch.object(feed, "_get_json", return_value={"jobs": [listing]}):
             self.assertEqual(list(feed.listings_for(source)), [])
+
+    def test_description_preserves_html_paragraphs_and_bullets(self):
+        value = '&lt;h2&gt;Responsibilities&lt;/h2&gt;&lt;p&gt;Build &lt;b&gt;safe&lt;/b&gt; systems.&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Write code&lt;/li&gt;&lt;li&gt;Review changes&lt;/li&gt;&lt;/ul&gt;'
+        self.assertEqual(description_text(value), '## Responsibilities\nBuild safe systems.\n• Write code\n• Review changes')
+        self.assertEqual(description_text('First paragraph.\nSecond paragraph.'), 'First paragraph.\nSecond paragraph.')
 
     def test_deadlines_only_use_explicit_source_values(self):
         self.assertEqual(closing_date({"validThrough": "2026-10-31T23:59:00Z"}), "2026-10-31")
@@ -64,6 +69,15 @@ class JobSyncNormalizationTests(unittest.TestCase):
         self.assertTrue(is_dfw("Lewisville, TX"))
         self.assertFalse(is_dfw("Allentown, PA"))
         self.assertFalse(is_dfw("Garlandville, Mississippi"))
+
+    def test_dfw_requires_texas_for_ambiguous_city_names(self):
+        self.assertFalse(is_dfw('Arlington, Virginia, United States'))
+        self.assertFalse(is_dfw('Arlington, VA'))
+        self.assertFalse(is_dfw('Dallas, GA'))
+        self.assertFalse(is_dfw('Arlington'))
+        self.assertTrue(is_dfw('Arlington, Texas, United States'))
+        self.assertTrue(is_dfw('Arlington, TX'))
+        self.assertTrue(is_dfw('Dallas, TX; Arlington, VA'))
 
     def test_technology_role_policy_rejects_general_company_roles(self):
         self.assertTrue(is_tech_job("Senior Software Engineer"))

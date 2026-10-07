@@ -226,6 +226,20 @@ def confirm_password_reset():
 
 # JOBS
 
+@app.route('/api/home')
+@token_required
+def home_content():
+    from datetime import date
+    rows=db.get_jobs(limit=None)
+    local=re.compile(r'\b(dallas|fort worth|dfw|plano|frisco|irving|richardson|garland|mckinney|carrollton|grapevine|southlake|lewisville|denton)\b',re.I)
+    jobs=[job for job in rows if local.search(job.get('location') or '')]
+    internship=re.compile(r'\bintern(?:ship)?\b',re.I)
+    student=re.compile(r'\b(intern(?:ship)?|junior|entry[ -]level|new grad(?:uate)?|associate)\b',re.I)
+    starters=[job for job in jobs if student.search((job.get('title') or '')+' '+(job.get('job_type') or ''))]
+    starters.sort(key=lambda job:str(job.get('date_posted') or job.get('date_crawled') or ''),reverse=True)
+    return jsonify_safe({'stats':{'jobs':len(jobs),'companies':len({job['company_id'] for job in jobs}),'internships':sum(bool(internship.search((job.get('title') or '')+' '+(job.get('job_type') or ''))) for job in jobs)},'student_jobs':db.add_resume_matches(request.user_id,starters[:3])})
+
+
 @app.route("/api/jobs", methods=["GET"])
 @token_required
 def get_jobs():
@@ -286,7 +300,21 @@ def get_job(job_id):
     job = db.get_job_by_id(job_id)
     if not job:
         return jsonify({"error": "Job not found"}), 404
-    return jsonify_safe(job)
+    return jsonify_safe(db.add_resume_matches(request.user_id, [job])[0])
+
+
+@app.route("/api/jobs/<int:job_id>/similar", methods=["GET"])
+@token_required
+def similar_jobs(job_id):
+    target = db.get_job_by_id(job_id)
+    if not target:
+        return jsonify({"error": "Job not found"}), 404
+    target = db.add_resume_matches(request.user_id, [target])[0]
+    candidates = db.add_resume_matches(request.user_id, db.get_jobs(limit=None))
+    from job_metadata import rank_similar_jobs
+    ranked = rank_similar_jobs(target, candidates)
+    limit = max(1, min(request.args.get("limit", 3, type=int) or 3, 100))
+    return jsonify_safe({"jobs": ranked if request.args.get("all") == "1" else ranked[:limit], "total": len(ranked)})
 
 
 # SAVED JOBS
@@ -456,6 +484,44 @@ def dismiss_detected_skill(flag_id):
     return jsonify({'message': 'Flagged skill dismissed.'})
 
 
+def detected_flag_ids(data):
+    ids = data.get('flag_ids') if isinstance(data, dict) else None
+    return list(dict.fromkeys(ids)) if isinstance(ids, list) and 0 < len(ids) <= 100 and all(type(value) is int and value > 0 for value in ids) else None
+
+
+@app.route('/api/resume/skills/add', methods=['POST'])
+@token_required
+def add_detected_skills():
+    ids = detected_flag_ids(request.get_json(silent=True))
+    if ids is None:
+        return jsonify({'error': 'Choose 1 to 100 detected skills.'}), 400
+    names = db.add_resume_skills_to_profile(request.user_id, ids)
+    if names is None:
+        return jsonify({'error': 'One or more detected skills are unavailable for your account.'}), 404
+    return jsonify({'message': 'Skills added to your profile.', 'skills': names})
+
+
+@app.route('/api/resume/skills/<int:flag_id>/restore', methods=['POST'])
+@token_required
+def restore_detected_skill(flag_id):
+    if not db.restore_resume_skill(request.user_id, flag_id):
+        return jsonify({'error': 'Dismissed skill not found for your account.'}), 404
+    return jsonify({'message': 'Suggestion restored.'})
+
+
+@app.route('/api/resume/skills/impact', methods=['POST'])
+@token_required
+def detected_skill_impact():
+    data = request.get_json(silent=True) or {}
+    ids = detected_flag_ids(data)
+    if ids is None:
+        return jsonify({'error': 'Choose 1 to 100 detected skills.'}), 400
+    discipline = data.get('discipline')
+    if discipline is not None and not isinstance(discipline, str):
+        return jsonify({'error': 'Invalid career category.'}), 400
+    return jsonify_safe(db.flagged_skill_impact(request.user_id, ids, discipline))
+
+
 @app.route("/api/admin/flagged-skills")
 @admin_required
 def flagged_skills():
@@ -541,7 +607,9 @@ def recommendations(user_id):
     """Return active jobs ranked by the student's verified catalog skills."""
     if request.user_id != user_id:
         return jsonify({"error": "Unauthorized"}), 403
-    return jsonify_safe(db.add_resume_matches(user_id, db.get_recommendations(user_id, db.get_profile_details(user_id).get('career_focus'))))
+    focus = db.get_profile_details(user_id).get('career_focus')
+    jobs = db.get_recommendations(user_id, focus, limit=None) if request.args.get('all') == '1' else db.get_recommendations(user_id, focus)
+    return jsonify_safe(db.add_resume_matches(user_id, jobs))
 
 
 @app.route("/api/market-trends")
@@ -591,6 +659,71 @@ def application_activity(user_id):
         return jsonify({"error": "Job not found"}), 404
     db.set_application_activity(user_id, job_id, status)
     return jsonify({"message": "Application activity updated"})
+
+
+@app.route('/api/students/<int:user_id>/reminder-preferences', methods=['GET', 'PUT'])
+@token_required
+def reminder_preferences(user_id):
+    if request.user_id != user_id:
+        return jsonify({'error': 'Unauthorized'}), 403
+    return jsonify({'email_enabled': False, 'email_available': False})
+
+
+@app.route('/api/students/<int:user_id>/job-reminder-dates/<int:job_id>', methods=['GET', 'PUT'])
+@token_required
+def job_reminder_dates(user_id, job_id):
+    if request.user_id != user_id:
+        return jsonify({'error':'Unauthorized'}), 403
+    with db.get_connection() as conn:
+        cur = conn.cursor(dictionary=True)
+        cur.execute('SELECT 1 FROM Saved_Jobs WHERE user_id=%s AND job_id=%s UNION SELECT 1 FROM Application_Activity WHERE user_id=%s AND job_id=%s', (user_id,job_id,user_id,job_id))
+        if not cur.fetchone():
+            return jsonify({'error':'Save or track this job before setting reminders'}),404
+        if request.method == 'PUT':
+            data=request.get_json(silent=True) or {}
+            values=[]
+            for field in ['deadline','follow_up']:
+                value=data.get(field)
+                if value:
+                    try:
+                        if not isinstance(value,str) or len(value)!=10: raise ValueError()
+                        value=datetime.date.fromisoformat(value)
+                    except ValueError:
+                        return jsonify({'error':'Enter a valid reminder date'}),400
+                values.append(value or None)
+            cur.execute('INSERT INTO Job_Reminder_Dates(user_id,job_id,deadline,follow_up) VALUES(%s,%s,%s,%s) ON DUPLICATE KEY UPDATE deadline=VALUES(deadline),follow_up=VALUES(follow_up)', (user_id,job_id,*values))
+            conn.commit()
+        cur.execute('SELECT deadline,follow_up FROM Job_Reminder_Dates WHERE user_id=%s AND job_id=%s',(user_id,job_id))
+        row=cur.fetchone() or {}
+    return jsonify({key: str(row[key]) if row.get(key) else '' for key in ['deadline','follow_up']})
+
+
+@app.route('/api/reminders/unsubscribe', methods=['GET','POST'])
+def unsubscribe_reminders():
+    token=request.args.get('token','')
+    try:
+        payload=jwt.decode(token,JWT_SECRET,algorithms=['HS256'])
+        if payload.get('purpose')!='unsubscribe-reminders': raise ValueError()
+        user_id=int(payload['user_id'])
+    except (jwt.PyJWTError,ValueError,KeyError):
+        return 'This link is invalid or expired. Turn off alerts in your Dashboard.',400
+    if request.method=='GET':
+        return '<!doctype html><title>Turn off alerts</title><h1>NovaTeck email alerts</h1><form method="post"><button type="submit">Turn off email alerts and reminders</button></form>'
+    with db.get_connection() as conn:
+        cur=conn.cursor()
+        cur.execute('UPDATE Reminder_Preferences SET email_enabled=FALSE WHERE user_id=%s',(user_id,))
+        conn.commit()
+    return 'Email alerts and reminders turned off. In-app alerts remain available.'
+
+
+@app.route('/api/students/<int:user_id>/reminders')
+@token_required
+def student_reminders(user_id):
+    if request.user_id != user_id:
+        return jsonify({'error': 'Unauthorized'}), 403
+    from reminders import user_reminders
+    from job_alerts import matching_new_jobs
+    return jsonify(user_reminders(user_id) + matching_new_jobs(user_id))
 
 
 @app.route("/api/admin/overview")
