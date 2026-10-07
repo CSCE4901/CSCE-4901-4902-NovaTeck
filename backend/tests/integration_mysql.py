@@ -57,6 +57,9 @@ def main():
         assert client.get('/api/admin/overview', headers=headers).status_code == 403
         assert db.get_job_count(work_type='Contract') == 0
         before = db.get_skill_gap(user, job)
+        assert before['resume_match_source'] == 'profile'
+        profile_before_upload = set(db.get_user_skills(user))
+        market_before_upload = db.get_student_skill_gap_summary(user)['overall_match_pct']
         assert db.get_job_count(q='Software') == 1
         assert db.get_job_count(q='no-such-title') == 0
         db.generate_skill_trend_snapshot()
@@ -69,7 +72,11 @@ def main():
             assert response.json['flagged_count'] == expected, response.json
         flags = db.get_flagged_skills(user)
         assert {row['skill_name'] for row in flags} == {'aws', 'mysql', 'react', 'rust'}, flags
-        assert db.get_skill_gap(user, job) == before
+        resume_baseline = db.get_skill_gap(user, job)
+        assert resume_baseline['resume_match_source'] == 'resume'
+        assert set(db.get_user_skills(user)) == profile_before_upload
+        assert db.get_student_skill_gap_summary(user)['overall_match_pct'] == market_before_upload
+        assert resume_baseline['match_pct'] == before['match_pct']
         assert client.get('/api/admin/flagged-skills', headers=headers).status_code == 403
         cursor.execute("UPDATE Users SET role = 'admin' WHERE user_id = %s", (user,)); connection.commit()
         assert client.get('/api/admin/overview', headers=headers).json['counts']['registered_users'] >= 1
@@ -77,7 +84,7 @@ def main():
             assert client.post('/api/admin/approve-skill/'+str(pending['unmatched_id']), headers=headers).status_code == 200
         assert not db.get_flagged_skills(user)
         cursor.execute("SELECT skill_id FROM Skills WHERE skill_name = 'rust'"); assert cursor.fetchone()
-        assert db.get_skill_gap(user, job) == before
+        assert db.get_skill_gap(user, job) == resume_baseline
         assert db.flag_resume_skills(user, ['new-test-skill']) == 1
         flag = db.get_flagged_skills(user)[0]
         assert client.post('/api/admin/reject-skill/'+str(flag['unmatched_id']), headers=headers).status_code == 200
@@ -87,7 +94,7 @@ def main():
         assert [row['skill_name'] for row in db.get_flagged_skills(user)] == ['react']
         assert db.flag_resume_skills(user, ['react']) == 0
         assert [skill.lower() for skill in db.get_user_skills(user)] == ['python']
-        assert db.get_skill_gap(user, job) == before
+        assert db.get_skill_gap(user, job) == resume_baseline
         flag_id = db.get_flagged_skills(user)[0]['unmatched_id']
         assert not db.add_resume_skill_to_profile(user + 1, flag_id)
         add_path = f'/api/resume/skills/{flag_id}/add'
@@ -100,7 +107,9 @@ def main():
         assert db.flag_resume_skills(user, ['sql']) == 1
         sql_flag = db.get_flagged_skills(user)[0]['unmatched_id']
         assert db.add_resume_skill_to_profile(user, sql_flag)
-        assert db.get_skill_gap(user, job)['match_pct'] == 100
+        assert 'sql' in {skill.lower() for skill in db.get_user_skills(user)}
+        # Profile additions do not rewrite the uploaded resume.
+        assert db.get_skill_gap(user, job) == resume_baseline
         mechanical_job = db.insert_job(company, 'Mechanical Engineer', 'https://example.test/mechanical')
         aerospace_job = db.insert_job(company, 'Aerospace Engineer', 'https://example.test/aerospace')
         db.link_job_skill(mechanical_job, db.insert_skill('thermodynamics'))
@@ -152,12 +161,16 @@ def main():
         assert db.flag_resume_skills(other['user_id'], ['docker']) == 1
         foreign = db.get_flagged_skills(other['user_id'])[0]['unmatched_id']
         profile_before = set(db.get_user_skills(user))
+        market_before_add = db.get_student_skill_gap_summary(user)['overall_match_pct']
+        saved_resume_match_before_add = db.get_skill_gap(user, impact_id)
         assert client.post('/api/resume/skills/add', headers=headers, json={'flag_ids': [batch[0], foreign]}).status_code == 404
         assert set(db.get_user_skills(user)) == profile_before
         assert client.post('/api/resume/skills/add', headers=headers, json={'flag_ids': [True]}).status_code == 400
         impact = client.post('/api/resume/skills/impact', headers=headers, json={'flag_ids': batch, 'discipline': ''})
         assert impact.status_code == 200, impact.json
         assert impact.json['projected_average'] > impact.json['current_average'], impact.json
+        assert impact.json['current_market_match'] == market_before_add, impact.json
+        assert impact.json['projected_market_match'] > market_before_add, impact.json
         assert impact.json['has_saved_resume'] is True
         assert impact.json['skill_job_counts'][str(batch[0])] >= 1
         assert client.delete(f'/api/resume/skills/{batch[0]}', headers=headers).status_code == 200
@@ -166,6 +179,11 @@ def main():
         assert client.post(f'/api/resume/skills/{batch[0]}/restore', headers=headers).status_code == 200
         result = client.post('/api/resume/skills/add', headers=headers, json={'flag_ids': batch})
         assert result.status_code == 200, result.json
+        market_after_add = db.get_student_skill_gap_summary(user)['overall_match_pct']
+        assert market_after_add == impact.json['projected_market_match'], (market_after_add, impact.json)
+        assert market_after_add > market_before_add
+        assert db.get_skill_gap(user, impact_id) == saved_resume_match_before_add
+        print(f'PASS: explicit Add refreshes Market skill match {market_before_add}% -> {market_after_add}%; saved-resume job match remains unchanged')
         assert {'docker', 'kubernetes'} <= {value.lower() for value in db.get_user_skills(user)}
         assert profile_before <= set(db.get_user_skills(user))
         assert not {row['unmatched_id'] for row in db.get_flagged_skills(user)} & set(batch)

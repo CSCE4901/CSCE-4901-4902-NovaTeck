@@ -57,3 +57,11 @@ Job Details shows the DFW location first for multi-location postings, extracts e
 The navbar hides while scrolling down and reappears on upward scroll or near the page top. Keyboard focus and expanded navigation controls keep it visible; reduced-motion preferences disable its slide transition.
 
 Dashboard Saved Jobs and Recommended Jobs use compact rows with logo, linked title, company/location, match badge, and bookmark only. Thin-data dashboard badges say Limited data. Each widget shows at most five rows and its See all link opens a dedicated compact list; the full Jobs-page cards are unchanged.
+
+## Match approval contract and DDS2 Step 4 (October 6, 2026)
+
+The Skill Gap ring, bar, and Flagged Skills preview all use demand-weighted **Market skill match**, calculated from the student's approved profile skills. Uploading/scanning a resume flags suggestions without changing those skills or this market percentage. Student Add updates profile skills and refreshes that percentage; the projected and actual market scores must agree. The DDS2 62% → 71% illustration maps to this market metric, with actual percentages determined by database demand. It is not a hardcoded fixture.
+
+Individual Jobs/Dashboard/Job Details scores use the privately saved resume (profile fallback when absent). Uploading a replacement can change those job-specific scores before profile approval; profile Add does not rewrite the resume. This is a deliberate departure from applying CR2-REQ-17's unchanged-until-approval rule to **every** score, and is not claimed as literal compliance with that original interpretation. The page explains the two data sources. The user-requested saved-resume comparisons and profile-based market demo are verified separately.
+
+The isolated MySQL integration script now checks scan/profile/market invariance, unchanged saved-resume scoring after profile Add, and actual market improvement matching its preview after Add. Whole-result equality against the pre-upload snapshot is inappropriate because the source legitimately changes from profile to resume; score and profile invariants remain explicit assertions.
