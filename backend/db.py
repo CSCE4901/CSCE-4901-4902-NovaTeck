@@ -50,6 +50,16 @@ DB_CONFIG = {
     "use_pure": True,  # Avoid native connector crashes under concurrent Python 3.14 requests.
 }
 
+# Resolve relative CA paths against backend so all entry points use the same file.
+if os.environ.get("DB_SSL_CA", "").strip():
+    ca_path = Path(os.environ["DB_SSL_CA"].strip()).expanduser()
+    if not ca_path.is_absolute():
+        ca_path = Path(__file__).resolve().parent / ca_path
+    if not ca_path.is_file():
+        raise ValueError("DB_SSL_CA must point to an existing CA certificate file")
+    DB_CONFIG.update(ssl_ca=str(ca_path), ssl_verify_cert=True,
+                     ssl_verify_identity=True, ssl_disabled=False)
+
 
 @contextmanager
 def get_connection():

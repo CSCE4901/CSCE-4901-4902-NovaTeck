@@ -1,4 +1,5 @@
 backend/.env
+backend/aiven-ca.pem
 backend/backend_venv/
 __pycache__/
 *.pyc
