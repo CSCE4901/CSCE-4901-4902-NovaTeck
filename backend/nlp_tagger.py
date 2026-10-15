@@ -22,10 +22,11 @@ KNOWN_SKILLS = [
     "swift", "kotlin", "scala", "r", "matlab", "php", "rust",
     "react", "angular", "vue", "html", "css", "sass", "bootstrap", "tailwind",
     "next.js", "node.js", "express", "jquery",
-    "helm", "spark", "kafka", "starrocks", "snowflake", "bigquery",
-    "langgraph", "iceberg", "delta lake", "hudi", "llm", "http api",
-    "relational data modeling", "automated testing", "observability",
-    "distributed systems", "version control", "code review",
+    "helm", "spark", "kafka", "starrocks", "snowflake", "bigquery", "palantir foundry",
+    "langgraph", "iceberg", "delta lake", "hudi", "llm", "http api", "api",
+    "relational data modeling", "data modeling", "data pipelines",
+    "automated testing", "testing", "software design", "documentation", "observability",
+    "distributed systems", "version control", "code review", "full-stack",
     "flask", "django", "fastapi", "spring boot", "rest api", "graphql",
     "microservices", "api development",
     "mysql", "postgresql", "sqlite", "mongodb", "redis", "oracle", "sql server",
@@ -107,6 +108,54 @@ def _skill_pattern(skill):
     return r"(?<!\w)" + re.escape(skill) + r"(?!\w)"
 
 
+def _extract_sentence_groups(sentence, required_mentions):
+    """Group required mentions into OR-alternative sets based on span overlaps and OR bridges."""
+    if not required_mentions:
+        return []
+    sorted_mentions = sorted(required_mentions, key=lambda m: (m[0], -m[1]))
+    line_groups = [{skill} for _, _, skill in sorted_mentions]
+    n = len(sorted_mentions)
+
+    # 1. Merge mentions whose character spans overlap into a single OR group
+    max_end = sorted_mentions[0][1]
+    cluster_first = 0
+    for i in range(1, n):
+        start_i, end_i, _ = sorted_mentions[i]
+        if start_i < max_end:
+            combined = set().union(*line_groups[cluster_first:i + 1])
+            for m in range(cluster_first, i + 1):
+                line_groups[m] = combined
+            max_end = max(max_end, end_i)
+        else:
+            cluster_first = i
+            max_end = end_i
+
+    # 2. Merge explicit OR bridges: 'or', 'and/or', '/'
+    for index in range(1, n):
+        prev_end = sorted_mentions[index - 1][1]
+        curr_start = sorted_mentions[index][0]
+        if curr_start >= prev_end:
+            bridge = sentence[prev_end:curr_start]
+            if re.fullmatch(r'\s*(?:,?\s*or|and/or|/)\s*', bridge, re.I):
+                first = index - 1
+                while first > 0 and re.fullmatch(r'\s*,\s*', sentence[sorted_mentions[first - 1][1]:sorted_mentions[first][0]]):
+                    first -= 1
+                combined = set().union(*line_groups[first:index + 1])
+                for member in range(first, index + 1):
+                    line_groups[member] = combined
+
+    # 3. Handle trailing framework alternatives
+    if len(sorted_mentions) >= 2:
+        first, second = sorted_mentions[-2:]
+        frameworks = {'react', 'angular', 'vue', 'next.js'}
+        tail = sentence[second[1]:]
+        bridge = sentence[first[1]:second[0]]
+        if first[2] in frameworks and second[2] in frameworks and re.fullmatch(r'\s*,\s*', bridge) and re.match(r'\s*,?\s*or\s+(?:a\s+)?comparable\b', tail, re.I):
+            line_groups[-2] = line_groups[-1] = {first[2], second[2]}
+
+    return [sorted(group) for group in line_groups]
+
+
 def hardware_skill_evidence(sentence):
     """Require an explicit competency, not a mention of an employer's hardware."""
     return bool(re.search(
@@ -116,19 +165,21 @@ def hardware_skill_evidence(sentence):
         sentence, re.IGNORECASE))
 
 
-def _tag_plain_text(description):
+def _tag_plain_text(description, return_groups=False):
     """Tag skills for job."""
     if not description:
-        return []
+        return ([], []) if return_groups else []
 
     for alias, canonical in _ALIASES.items():
         description = re.sub(_skill_pattern(alias), canonical, description, flags=re.IGNORECASE)
     language, matcher = skill_matcher()
     tagged = {}
+    groups = []
     for section_tag, line in _split_into_sections(description):
         # Split requirements without breaking names like Node.js.
         for sentence in re.split(r"(?<=[.!?;])\s+|\s+(?:but|whereas)\s+", line):
             document = language.make_doc(sentence)
+            required_mentions = []
             for match_id, start, end in matcher(document):
                 skill = language.vocab.strings[match_id]
                 if not re.search(_skill_pattern(skill), sentence, re.IGNORECASE):
@@ -138,8 +189,19 @@ def _tag_plain_text(description):
                 tag = _tag_sentence(sentence, section_tag)
                 if tagged.get(skill) != "required":
                     tagged[skill] = tag
-    return [{"skill_name": skill, "requirement_type": tagged[skill]}
-            for skill in KNOWN_SKILLS if skill in tagged]
+                if tag == "required":
+                    span = document[start:end]
+                    required_mentions.append((span.start_char, span.end_char, skill))
+            if return_groups and required_mentions:
+                groups.extend(_extract_sentence_groups(sentence, required_mentions))
+
+    skills = [{"skill_name": skill, "requirement_type": tagged[skill]}
+              for skill in KNOWN_SKILLS if skill in tagged]
+    if return_groups:
+        unique = {tuple(sorted(group)) for group in groups if group}
+        resolved_groups = [sorted(group) for group in sorted(unique) if not any(set(other) < set(group) for other in unique)]
+        return skills, resolved_groups
+    return skills
 
 
 # These labels classify source-provided headings for extraction, never display cards.
@@ -159,6 +221,9 @@ _PREFERRED_HEADINGS = {
 _ALIASES = {
     'postgres': 'postgresql', 'k8s': 'kubernetes', 'llms': 'llm',
     'http apis': 'http api', 'rest apis': 'rest api', 'delta': 'delta lake',
+    'full stack': 'full-stack', 'apis': 'api',
+    'visualization': 'data visualization',
+    'data pipeline': 'data pipelines',
 }
 
 
@@ -206,8 +271,8 @@ def analyze_job_skills(description, description_html=None):
     if not any(kind == 'required' for kind, _ in labeled):
         labeled = []
     if not labeled:
-        tags = _tag_plain_text(description)
-        return {'skills': tags, 'required_groups': [[tag['skill_name']] for tag in tags if tag['requirement_type'] == 'required'], 'source': 'text_fallback'}
+        tags, groups = _tag_plain_text(description, return_groups=True)
+        return {'skills': tags, 'required_groups': groups, 'source': 'text_fallback'}
     tagged, groups = {}, []
     for default, fragment in labeled:
         soup = BeautifulSoup(fragment, 'html.parser')
@@ -232,27 +297,10 @@ def analyze_job_skills(description, description_html=None):
                         tagged[skill] = kind
                     if kind == 'required':
                         required_mentions.append((start, end, skill))
-                line_groups = [{skill} for _, _, skill in required_mentions]
-                for index in range(1, len(required_mentions)):
-                    bridge = sentence[required_mentions[index - 1][1]:required_mentions[index][0]]
-                    if re.fullmatch(r'\s*(?:,?\s*or|and/or|/)\s*', bridge, re.I):
-                        first = index - 1
-                        while first > 0 and re.fullmatch(r'\s*,\s*', sentence[required_mentions[first - 1][1]:required_mentions[first][0]]):
-                            first -= 1
-                        combined = set().union(*line_groups[first:index + 1])
-                        for member in range(first, index + 1):
-                            line_groups[member] = combined
-                if len(required_mentions) >= 2:
-                    first, second = required_mentions[-2:]
-                    frameworks = {'react', 'angular', 'vue', 'next.js'}
-                    tail = sentence[second[1]:]
-                    bridge = sentence[first[1]:second[0]]
-                    if first[2] in frameworks and second[2] in frameworks and re.fullmatch(r'\s*,\s*', bridge) and re.match(r'\s*,?\s*or\s+(?:a\s+)?comparable\b', tail, re.I):
-                        line_groups[-2] = line_groups[-1] = {first[2], second[2]}
-                groups.extend(line_groups)
+                groups.extend(_extract_sentence_groups(sentence, required_mentions))
     # A single explicit mention elsewhere still makes a skill individually required.
     unique = {tuple(sorted(group)) for group in groups if group}
-    groups = [list(group) for group in sorted(unique) if not any(set(other) < set(group) for other in unique)]
+    groups = [sorted(group) for group in sorted(unique) if not any(set(other) < set(group) for other in unique)]
     return {'skills': [{'skill_name': skill, 'requirement_type': tagged[skill]} for skill in KNOWN_SKILLS if skill in tagged],
             'required_groups': groups, 'source': 'qualification_html'}
 
