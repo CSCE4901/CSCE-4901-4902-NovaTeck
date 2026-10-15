@@ -105,7 +105,7 @@ Ability to deliver complex projects independently while collaborating effectivel
              [['automated testing', 'testing']]),
             ("<h2>Requirements</h2><ul><li>Experience with REST API development</li></ul>",
              [['api', 'api development', 'rest api']]),
-            ("<h2>Requirements</h2><ul><li>Experience with testing</li></ul>",
+            ("<h2>Requirements</h2><ul><li>Experience with software testing</li></ul>",
              [['testing']]),
             ("<h2>Requirements</h2><ul><li>backend (API)</li></ul>",
              [['api']]),
@@ -123,7 +123,7 @@ Ability to deliver complex projects independently while collaborating effectivel
              [['automated testing', 'testing']]),
             ("Requirements:\n- Experience with REST API development",
              [['api', 'api development', 'rest api']]),
-            ("Requirements:\n- Experience with testing",
+            ("Requirements:\n- Experience with software testing",
              [['testing']]),
             ("Requirements:\n- backend (API)",
              [['api']]),
@@ -146,3 +146,194 @@ Ability to deliver complex projects independently while collaborating effectivel
         res_api = analyze_job_skills("Requirements:\n- Experience building APIs", None)
         self.assertIn('api', [s['skill_name'] for s in res_api['skills']])
         self.assertEqual(res_api['required_groups'], [['api']])
+
+    def test_software_cues_and_go_filtering_html_path(self):
+        positives = [
+            ("<h2>Required qualifications</h2><ul><li>software testing</li></ul>",
+             'testing'),
+            ("<h2>Required qualifications</h2><ul><li>Solid foundation in software design, testing, and documentation</li></ul>",
+             'testing'),
+            ("<h2>Required qualifications</h2><ul><li>Solid foundation in software design, testing, and documentation</li></ul>",
+             'documentation'),
+            ("<h2>Required qualifications</h2><ul><li>Node.js, Go, or Python</li></ul>",
+             'go'),
+        ]
+        for html, expected_skill in positives:
+            with self.subTest(pos=html, skill=expected_skill):
+                res = analyze_job_skills('', html)
+                skills = [s['skill_name'] for s in res['skills']]
+                self.assertIn(expected_skill, skills)
+
+        negatives = [
+            ("<h2>Required qualifications</h2><ul><li>Plan and run design verification and certification testing</li></ul>",
+             'testing'),
+            ("<h2>Required qualifications</h2><ul><li>Conduct hands-on bring-up, lab testing, HIL testing, and flight test preparation</li></ul>",
+             'testing'),
+            ("<h2>Required qualifications</h2><ul><li>Develop and maintain revision-controlled product documentation</li></ul>",
+             'documentation'),
+            ("<h2>Required qualifications</h2><ul><li>Familiarity with go-to-market data</li></ul>",
+             'go'),
+            ("<h2>Required qualifications</h2><ul><li>Orchestrate business UAT, go-live readiness</li></ul>",
+             'go'),
+            ("<h2>Required qualifications</h2><ul><li>You can interpret system diagrams, APIs, integrations, data flows, migration approaches, and testing dependencies.</li></ul>",
+             'testing'),
+        ]
+        for html, rejected_skill in negatives:
+            with self.subTest(neg=html, rejected=rejected_skill):
+                res = analyze_job_skills('', html)
+                skills = [s['skill_name'] for s in res['skills']]
+                self.assertNotIn(rejected_skill, skills)
+
+    def test_software_cues_and_go_filtering_plain_text_path(self):
+        positives = [
+            ("Requirements:\n- software testing", 'testing'),
+            ("Requirements:\n- Solid foundation in software design, testing, and documentation", 'testing'),
+            ("Requirements:\n- Solid foundation in software design, testing, and documentation", 'documentation'),
+            ("Requirements:\n- Node.js, Go, or Python", 'go'),
+        ]
+        for text, expected_skill in positives:
+            with self.subTest(pos=text, skill=expected_skill):
+                res = analyze_job_skills(text, None)
+                self.assertEqual(res['source'], 'text_fallback')
+                skills = [s['skill_name'] for s in res['skills']]
+                self.assertIn(expected_skill, skills)
+
+        negatives = [
+            ("Requirements:\n- Plan and run design verification and certification testing", 'testing'),
+            ("Requirements:\n- Conduct hands-on bring-up, lab testing, HIL testing, and flight test preparation", 'testing'),
+            ("Requirements:\n- Develop and maintain revision-controlled product documentation", 'documentation'),
+            ("Requirements:\n- Familiarity with go-to-market data", 'go'),
+            ("Requirements:\n- Orchestrate business UAT, go-live readiness", 'go'),
+            ("Requirements:\n- You can interpret system diagrams, APIs, integrations, data flows, migration approaches, and testing dependencies.", 'testing'),
+        ]
+        for text, rejected_skill in negatives:
+            with self.subTest(neg=text, rejected=rejected_skill):
+                res = analyze_job_skills(text, None)
+                self.assertEqual(res['source'], 'text_fallback')
+                skills = [s['skill_name'] for s in res['skills']]
+                self.assertNotIn(rejected_skill, skills)
+
+    def test_key_qualifications_job_246_structure(self):
+        html = """
+        <h3>Who You Are</h3>
+        <ul>
+            <li>Build user interfaces using React, TypeScript, and modern frontend frameworks.</li>
+            <li>Follow established security, access control, deployment, and documentation practices.</li>
+        </ul>
+        <p><strong>Key Qualifications:</strong></p>
+        <ul>
+            <li>Working proficiency in programming languages such as TypeScript, Python, Go, Java, C#, or C++</li>
+            <li>Solid understanding of programming fundamentals, data structures, debugging, and software testing.</li>
+        </ul>
+        <h3>Preferred:</h3>
+        <ul><li>Docker</li></ul>
+        """
+        res = analyze_job_skills('', html)
+        self.assertEqual(res['source'], 'qualification_html')
+        tags = {s['skill_name']: s['requirement_type'] for s in res['skills']}
+        self.assertEqual(tags.get('typescript'), 'required')
+        self.assertEqual(tags.get('react'), 'required')
+        self.assertEqual(tags.get('testing'), 'required')
+        self.assertEqual(tags.get('python'), 'preferred')
+        self.assertEqual(tags.get('go'), 'preferred')
+        self.assertEqual(tags.get('docker'), 'preferred')
+
+    def test_singleton_plus_or_list_html_path(self):
+        html = """
+        <h2>Required qualifications</h2>
+        <ul>
+            <li>Build UIs using React and TypeScript.</li>
+            <li>Working proficiency in one or more programming languages such as TypeScript, Python, Go, Java, C#, or C++.</li>
+        </ul>
+        """
+        res = analyze_job_skills('', html)
+        tags = {s['skill_name']: s['requirement_type'] for s in res['skills']}
+        self.assertEqual(tags.get('typescript'), 'required')
+        self.assertEqual(tags.get('react'), 'required')
+        for s in ['python', 'go', 'java', 'c#', 'c++']:
+            self.assertEqual(tags.get(s), 'preferred')
+        all_group_skills = set().union(*res['required_groups']) if res['required_groups'] else set()
+        for s in ['python', 'go', 'java', 'c#', 'c++']:
+            self.assertNotIn(s, all_group_skills)
+        self.assertIn(['react'], res['required_groups'])
+        self.assertIn(['typescript'], res['required_groups'])
+
+    def test_singleton_plus_or_list_plain_text_path(self):
+        text = """Requirements:
+- Build UIs using React and TypeScript.
+- Working proficiency in one or more programming languages such as TypeScript, Python, Go, Java, C#, or C++.
+"""
+        res = analyze_job_skills(text, None)
+        self.assertEqual(res['source'], 'text_fallback')
+        tags = {s['skill_name']: s['requirement_type'] for s in res['skills']}
+        self.assertEqual(tags.get('typescript'), 'required')
+        self.assertEqual(tags.get('react'), 'required')
+        for s in ['python', 'go', 'java', 'c#', 'c++']:
+            self.assertEqual(tags.get(s), 'preferred')
+        all_group_skills = set().union(*res['required_groups']) if res['required_groups'] else set()
+        for s in ['python', 'go', 'java', 'c#', 'c++']:
+            self.assertNotIn(s, all_group_skills)
+        self.assertIn(['react'], res['required_groups'])
+        self.assertIn(['typescript'], res['required_groups'])
+
+    def test_or_list_no_singleton_html_path(self):
+        html = "<h2>Required qualifications</h2><ul><li>Experience with Python, Go, or Java.</li></ul>"
+        res = analyze_job_skills('', html)
+        tags = {s['skill_name']: s['requirement_type'] for s in res['skills']}
+        self.assertEqual(tags.get('python'), 'required')
+        self.assertEqual(tags.get('go'), 'required')
+        self.assertEqual(tags.get('java'), 'required')
+        self.assertEqual(res['required_groups'], [['go', 'java', 'python']])
+
+    def test_or_list_no_singleton_plain_text_path(self):
+        text = "Requirements:\n- Experience with Python, Go, or Java."
+        res = analyze_job_skills(text, None)
+        self.assertEqual(res['source'], 'text_fallback')
+        tags = {s['skill_name']: s['requirement_type'] for s in res['skills']}
+        self.assertEqual(tags.get('python'), 'required')
+        self.assertEqual(tags.get('go'), 'required')
+        self.assertEqual(tags.get('java'), 'required')
+        self.assertEqual(res['required_groups'], [['go', 'java', 'python']])
+
+    def test_frameworks_with_singleton_html_path(self):
+        html = """
+        <h2>Required qualifications</h2>
+        <ul>
+            <li>Experience building user interfaces with React.</li>
+            <li>Experience building web applications or backend services using frameworks such as React, Next.js, Node.js, or FastAPI.</li>
+        </ul>
+        """
+        res = analyze_job_skills('', html)
+        tags = {s['skill_name']: s['requirement_type'] for s in res['skills']}
+        self.assertEqual(tags.get('react'), 'required')
+        self.assertEqual(tags.get('next.js'), 'preferred')
+        self.assertEqual(tags.get('node.js'), 'preferred')
+        self.assertEqual(tags.get('fastapi'), 'preferred')
+        self.assertEqual(res['required_groups'], [['react']])
+
+    def test_frameworks_with_singleton_plain_text_path(self):
+        text = """Requirements:
+- Experience building user interfaces with React.
+- Experience building web applications or backend services using frameworks such as React, Next.js, Node.js, or FastAPI.
+"""
+        res = analyze_job_skills(text, None)
+        self.assertEqual(res['source'], 'text_fallback')
+        tags = {s['skill_name']: s['requirement_type'] for s in res['skills']}
+        self.assertEqual(tags.get('react'), 'required')
+        self.assertEqual(tags.get('next.js'), 'preferred')
+        self.assertEqual(tags.get('node.js'), 'preferred')
+        self.assertEqual(tags.get('fastapi'), 'preferred')
+        self.assertEqual(res['required_groups'], [['react']])
+
+    def test_prefix_headings_recognized(self):
+        html_prefix = """
+        <p><strong>Minimum requirements for the role:</strong></p>
+        <ul><li>SQL experience</li></ul>
+        <p><strong>An ideal candidate also has:</strong></p>
+        <ul><li>Docker experience</li></ul>
+        """
+        res_prefix = analyze_job_skills('', html_prefix)
+        self.assertEqual(res_prefix['source'], 'qualification_html')
+        tags = {s['skill_name']: s['requirement_type'] for s in res_prefix['skills']}
+        self.assertEqual(tags.get('sql'), 'required')
+        self.assertEqual(tags.get('docker'), 'preferred')

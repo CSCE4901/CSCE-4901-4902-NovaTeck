@@ -156,6 +156,35 @@ def _extract_sentence_groups(sentence, required_mentions):
     return [sorted(group) for group in line_groups]
 
 
+_PROGRAMMING_LANGUAGES = {
+    'python', 'java', 'javascript', 'typescript', 'c++', 'c#', 'go', 'ruby',
+    'swift', 'kotlin', 'scala', 'r', 'matlab', 'php', 'rust', 'node.js',
+}
+_SOFTWARE_SKILLS = set(_PROGRAMMING_LANGUAGES) - {'go', 'r'} | {'sql', 'docker'}
+_SOFTWARE_CUES_RE = re.compile(r"\b(?:software|code|coding|automated|qa|ci/cd|unit\s+tests?)\b", re.IGNORECASE)
+_GO_LANG_CUES_RE = re.compile(r"\b(?:golang|programming\s+languages?)\b", re.IGNORECASE)
+
+
+def _is_valid_go_mention(sentence, start, end, other_skills):
+    if (start > 0 and sentence[start - 1] == '-') or (end < len(sentence) and sentence[end] == '-'):
+        return False
+    if any(s in _PROGRAMMING_LANGUAGES for s in other_skills if s not in ('go', 'r')):
+        return True
+    return bool(_GO_LANG_CUES_RE.search(sentence))
+
+
+def _is_valid_evidence_mention(skill, sentence, start, end, all_skills):
+    if skill == 'hardware' and not hardware_skill_evidence(sentence):
+        return False
+    if skill in ('testing', 'documentation'):
+        has_cue = bool(_SOFTWARE_CUES_RE.search(sentence)) or any(s in _SOFTWARE_SKILLS for s in all_skills if s != skill)
+        if not has_cue:
+            return False
+    if skill == 'go' and not _is_valid_go_mention(sentence, start, end, all_skills):
+        return False
+    return True
+
+
 def hardware_skill_evidence(sentence):
     """Require an explicit competency, not a mention of an employer's hardware."""
     return bool(re.search(
@@ -179,28 +208,38 @@ def _tag_plain_text(description, return_groups=False):
         # Split requirements without breaking names like Node.js.
         for sentence in re.split(r"(?<=[.!?;])\s+|\s+(?:but|whereas)\s+", line):
             document = language.make_doc(sentence)
-            required_mentions = []
+            raw_sentence_matches = []
             for match_id, start, end in matcher(document):
                 skill = language.vocab.strings[match_id]
                 if not re.search(_skill_pattern(skill), sentence, re.IGNORECASE):
                     continue
-                if skill == "hardware" and not hardware_skill_evidence(sentence):
+                span = document[start:end]
+                raw_sentence_matches.append((span.start_char, span.end_char, skill))
+            all_skills = set(s for _, _, s in raw_sentence_matches)
+            required_mentions = []
+            for s_start, s_end, skill in raw_sentence_matches:
+                if not _is_valid_evidence_mention(skill, sentence, s_start, s_end, all_skills):
                     continue
                 tag = _tag_sentence(sentence, section_tag)
                 if tagged.get(skill) != "required":
                     tagged[skill] = tag
                 if tag == "required":
-                    span = document[start:end]
-                    required_mentions.append((span.start_char, span.end_char, skill))
+                    required_mentions.append((s_start, s_end, skill))
             if return_groups and required_mentions:
                 groups.extend(_extract_sentence_groups(sentence, required_mentions))
 
-    skills = [{"skill_name": skill, "requirement_type": tagged[skill]}
-              for skill in KNOWN_SKILLS if skill in tagged]
     if return_groups:
         unique = {tuple(sorted(group)) for group in groups if group}
         resolved_groups = [sorted(group) for group in sorted(unique) if not any(set(other) < set(group) for other in unique)]
+        covered = set().union(*resolved_groups) if resolved_groups else set()
+        for skill, kind in tagged.items():
+            if kind == "required" and skill not in covered:
+                tagged[skill] = "preferred"
+        skills = [{"skill_name": skill, "requirement_type": tagged[skill]}
+                  for skill in KNOWN_SKILLS if skill in tagged]
         return skills, resolved_groups
+    skills = [{"skill_name": skill, "requirement_type": tagged[skill]}
+              for skill in KNOWN_SKILLS if skill in tagged]
     return skills
 
 
@@ -212,7 +251,7 @@ _REQUIRED_HEADINGS = {
     'minimum qualifications', 'minimum requirements', 'basic qualifications',
     'your qualifications', 'skills and experience', 'essential qualifications',
     'requirements and qualifications', 'required skills and experience',
-    'what experience should you have', 'experience',
+    'what experience should you have', 'experience', 'key qualifications',
 }
 _PREFERRED_HEADINGS = {
     'preferred', 'preferred qualifications', 'preferred skills', 'preferred experience',
@@ -228,15 +267,19 @@ _ALIASES = {
 
 
 def _mentions(text):
-    mentions = []
+    raw_mentions = []
     for skill in KNOWN_SKILLS:
         for match in re.finditer(_skill_pattern(skill), text, re.IGNORECASE):
-            if skill != 'hardware' or hardware_skill_evidence(text):
-                mentions.append((match.start(), match.end(), skill))
+            raw_mentions.append((match.start(), match.end(), skill))
     for alias, skill in _ALIASES.items():
         for match in re.finditer(_skill_pattern(alias), text, re.IGNORECASE):
-            mentions.append((match.start(), match.end(), skill))
-    return sorted(set(mentions))
+            raw_mentions.append((match.start(), match.end(), skill))
+    all_skills = set(s for _, _, s in raw_mentions)
+    filtered = [
+        (start, end, skill) for start, end, skill in raw_mentions
+        if _is_valid_evidence_mention(skill, text, start, end, all_skills)
+    ]
+    return sorted(set(filtered))
 
 
 def analyze_job_skills(description, description_html=None):
@@ -254,7 +297,12 @@ def analyze_job_skills(description, description_html=None):
         if getattr(element, 'name', None) and is_heading(element):
             title = element.get_text(' ', strip=True).lower().replace('&', ' and ')
             title = re.sub(r'\s+', ' ', re.sub(r'[^a-z0-9 ]', '', title)).strip()
-            kind = 'required' if title in _REQUIRED_HEADINGS else 'preferred' if title in _PREFERRED_HEADINGS else None
+            if title in _REQUIRED_HEADINGS or title.startswith('minimum requirements'):
+                kind = 'required'
+            elif title in _PREFERRED_HEADINGS or title.startswith('an ideal candidate'):
+                kind = 'preferred'
+            else:
+                kind = None
             level = int(element.name[1]) if element.name in ('h2', 'h3', 'h4') else 2
             if not kind and scope and level > scope_level:
                 # A lower-level heading belongs to its qualification parent.
@@ -301,6 +349,10 @@ def analyze_job_skills(description, description_html=None):
     # A single explicit mention elsewhere still makes a skill individually required.
     unique = {tuple(sorted(group)) for group in groups if group}
     groups = [sorted(group) for group in sorted(unique) if not any(set(other) < set(group) for other in unique)]
+    covered = set().union(*groups) if groups else set()
+    for skill, kind in tagged.items():
+        if kind == "required" and skill not in covered:
+            tagged[skill] = "preferred"
     return {'skills': [{'skill_name': skill, 'requirement_type': tagged[skill]} for skill in KNOWN_SKILLS if skill in tagged],
             'required_groups': groups, 'source': 'qualification_html'}
 
