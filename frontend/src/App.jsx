@@ -23,6 +23,11 @@ const SESSION_IDLE_MINUTES = 5;
 const SESSION_IDLE_MS = SESSION_IDLE_MINUTES * 60 * 1000;
 const SESSION_ACTIVITY_KEY = "nt_last_activity";
 
+function sessionTimeRemaining(lastActivity = Number(sessionStorage.getItem(SESSION_ACTIVITY_KEY))) {
+  const elapsed = Date.now() - lastActivity;
+  return elapsed >= 0 ? SESSION_IDLE_MS - elapsed : 0;
+}
+
 function clearSession() {
   for (const storage of [localStorage, sessionStorage]) {
     storage.removeItem("nt_token");
@@ -35,6 +40,12 @@ function clearSession() {
 function useAuth() { return useContext(AuthContext); }
 
 async function apiFetch(path, options = {}, token = null) {
+  if (token && sessionTimeRemaining() <= 0) {
+    window.dispatchEvent(new Event("novateck-session-expired"));
+    const error = new Error("Your session expired. Please sign in again.");
+    error.status = 401;
+    throw error;
+  }
   const headers = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
   let res;
@@ -63,8 +74,7 @@ export default function App() {
     localStorage.removeItem("nt_user");
     const token = sessionStorage.getItem("nt_token");
     const user = sessionStorage.getItem("nt_user");
-    const elapsed = Date.now() - Number(sessionStorage.getItem(SESSION_ACTIVITY_KEY));
-    if (token && user && elapsed >= 0 && elapsed < SESSION_IDLE_MS) {
+    if (token && user && sessionTimeRemaining() > 0) {
       try { return { ...JSON.parse(user), token }; } catch { /* Clear invalid stored session below. */ }
     }
     clearSession();
@@ -117,12 +127,12 @@ export default function App() {
     if (!auth?.token) return;
     let timer;
     let lastActivity = Number(sessionStorage.getItem(SESSION_ACTIVITY_KEY));
-    const activityEvents = ["pointerdown", "keydown", "input", "scroll"];
+    const activityEvents = ["pointerdown", "touchstart", "keydown", "input", "scroll"];
 
     function checkSession() {
       window.clearTimeout(timer);
-      const remaining = SESSION_IDLE_MS - (Date.now() - lastActivity);
-      if (remaining <= 0 || remaining > SESSION_IDLE_MS) {
+      const remaining = sessionTimeRemaining(lastActivity);
+      if (remaining <= 0) {
         logout(`You were signed out after ${SESSION_IDLE_MINUTES} minutes of inactivity.`);
         return false;
       }
@@ -143,12 +153,14 @@ export default function App() {
     for (const event of activityEvents) document.addEventListener(event, recordActivity, { capture: true, passive: true });
     document.addEventListener("visibilitychange", checkSession);
     window.addEventListener("pageshow", checkSession);
+    window.addEventListener("pagehide", checkSession);
     window.addEventListener("focus", checkSession);
     return () => {
       window.clearTimeout(timer);
       for (const event of activityEvents) document.removeEventListener(event, recordActivity, true);
       document.removeEventListener("visibilitychange", checkSession);
       window.removeEventListener("pageshow", checkSession);
+      window.removeEventListener("pagehide", checkSession);
       window.removeEventListener("focus", checkSession);
     };
   }, [auth?.token]);

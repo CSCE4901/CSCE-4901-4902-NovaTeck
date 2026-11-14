@@ -375,6 +375,7 @@ def sync_jobs(settings: SyncSettings, dry_run: bool = False) -> dict[str, int]:
         if not dry_run and stats["upserted"]:
             stats["retired"] += db.retire_legacy_seed_jobs()
         if not dry_run:
+            stats["purged"] = db.purge_unavailable_jobs()
             db.generate_skill_trend_snapshot()
         if run_id:
             db.finish_sync_run(run_id, "completed" if not stats["errors"] else "partial", stats)

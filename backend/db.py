@@ -268,8 +268,8 @@ def deactivate_stale_source_jobs(provider, last_successful_sync_started_at):
             cur = conn.cursor()
             cur.execute("""UPDATE Jobs SET is_active = FALSE
                            WHERE source_provider = %s AND is_active = TRUE
-                             AND last_seen_at < DATE_SUB(NOW(), INTERVAL 5 MINUTE)""",
-                        (provider,))
+                             AND last_seen_at < %s""",
+                        (provider, last_successful_sync_started_at.replace(microsecond=0)))
             conn.commit()
             return cur.rowcount
     except Error as e:
@@ -365,9 +365,34 @@ def get_latest_sync_run():
         return None
 
 
+_JOB_DATE_FILTERS = (
+    "(j.closing_date IS NULL OR j.closing_date >= CURDATE())",
+    "(j.date_posted IS NULL OR j.date_posted >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH))",
+)
+
+
+def purge_unavailable_jobs():
+    """Delete unavailable postings and their dependent records in one transaction."""
+    with get_connection() as conn:
+        cur = conn.cursor()
+        date_filters = " AND ".join(_JOB_DATE_FILTERS)
+        cur.execute(f"""SELECT j.job_id FROM Jobs j
+                        WHERE j.is_active = FALSE OR NOT ({date_filters})
+                        ORDER BY j.job_id FOR UPDATE""")
+        job_ids = [row[0] for row in cur.fetchall()]
+        for offset in range(0, len(job_ids), 500):
+            batch = job_ids[offset:offset + 500]
+            placeholders = ", ".join(["%s"] * len(batch))
+            # These older foreign keys have no ON DELETE CASCADE clause.
+            for table in ("Saved_Jobs", "Job_Skills", "Job_Snapshots", "Jobs"):
+                cur.execute(f"DELETE FROM {table} WHERE job_id IN ({placeholders})", batch)
+        conn.commit()
+        return len(job_ids)
+
+
 def _job_filters(skill=None, location=None, company_id=None, experience=None, discipline=None, is_active=True, q=None, work_type=None):
     """Build parameterized conditions shared by job search and pagination."""
-    conditions = ["j.is_active = %s", "(j.closing_date IS NULL OR j.closing_date >= CURDATE())", "(j.date_posted IS NULL OR j.date_posted >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH))"]
+    conditions = ["j.is_active = %s", *_JOB_DATE_FILTERS]
     params = [is_active]
     if work_type:
         requested = [value.strip().lower() for value in work_type.split(',') if value.strip()]
@@ -787,7 +812,10 @@ def set_user_skills_from_list(user_id, skill_names):
 # SAVED JOBS
 
 def save_job(user_id, job_id):
-    sql = "INSERT IGNORE INTO Saved_Jobs (user_id, job_id) VALUES (%s, %s)"
+    date_filters = " AND ".join(_JOB_DATE_FILTERS)
+    sql = f"""INSERT IGNORE INTO Saved_Jobs (user_id, job_id)
+              SELECT %s, j.job_id FROM Jobs j
+              WHERE j.job_id = %s AND j.is_active = TRUE AND {date_filters}"""
     try:
         with get_connection() as conn:
             cur = conn.cursor()
@@ -813,12 +841,13 @@ def remove_saved_job(user_id, job_id):
 
 
 def get_saved_jobs(user_id):
-    sql = """
+    date_filters = " AND ".join(_JOB_DATE_FILTERS)
+    sql = f"""
         SELECT j.*, c.name AS company_name, c.website_url AS company_website, sj.saved_at
         FROM Saved_Jobs sj
         JOIN Jobs j ON sj.job_id = j.job_id
         JOIN Companies c ON j.company_id = c.company_id
-        WHERE sj.user_id = %s
+        WHERE sj.user_id = %s AND j.is_active = TRUE AND {date_filters}
         ORDER BY sj.saved_at DESC
     """
     try:
