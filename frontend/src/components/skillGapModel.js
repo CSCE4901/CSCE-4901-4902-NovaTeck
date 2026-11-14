@@ -15,13 +15,13 @@ export function skillGapView(data, own, mode) {
   const total = market ? data.requested_skill_count ?? required.length : required.length;
   const percent = market
     ? (Number.isFinite(data.overall_match_pct) ? Math.max(0, Math.min(100, data.overall_match_pct)) : null)
-    : required.length ? Math.round(100 * (match.matched + .5 * match.partial) / required.length) : null;
+    : match.percent ?? (required.length ? Math.round(100 * (match.matched + .5 * match.partial) / required.length) : null);
   return { required, missing: required.filter(row => !row.matched), percent,
     matched: match.matched, total,
     reason: market
       ? 'Market match uses saved profile skills and demand across all required market skills. The list shows matched skills and the top 10 missing skills.'
       : required.length
-        ? `Based on saved profile skills: ${match.matched} of ${required.length} required skill groups fully matched. Partial matches earn half credit. Alternatives count as one group.`
+        ? `Based on saved profile skills: ${match.matched} of ${required.length} required skill groups fully matched. Partial matches, including listed examples, earn half credit. Explicit alternatives count as one group.`
         : profileMatchExplanation(match) };
 
 }

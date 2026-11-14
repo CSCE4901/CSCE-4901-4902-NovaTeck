@@ -23,7 +23,7 @@ test('empty, pending, unavailable and zero matches are distinct', () => {
 });
 test('required-only fallback, duplicate requirements and exact matching', () => {
   const fallback = { skills: [{ skill_name:'JavaScript',requirement_type:'required' },{skill_name:'javaSCRIPT',requirement_type:'required'},{skill_name:'Python',requirement_type:'preferred'}] };
-  assert.equal(profileMatch(fallback, ['java']).percent, null);
+  assert.equal(profileMatch(fallback, ['java']).percent, 0);
   assert.equal(profileMatch(fallback, ['javascript']).groups.length, 1);
   assert.equal(profileMatch({skill_summary:'React, SQL Server, Python'},['react','sql']).percent, 50);
 });
@@ -35,14 +35,11 @@ test('malformed and empty groups do not create fake zero-percent requirements', 
   assert.equal(profileMatch({resume_requirement_groups:[null,{skills:[]},{skills:null},{skills:['  ']}]},['python']).state,'unavailable');
 });
 
-test('fewer than three deduplicated requirements never show a percentage', () => {
-  for (const skills of ['', 'React', 'React, Python', 'React, react']) {
-    for (const profile of [undefined, [], ['react', 'python']]) {
-      const match = profileMatch({skill_summary: skills}, profile);
-      assert.equal(match.state, 'unavailable');
-      assert.equal(match.percent, null);
-    }
-  }
+test('one saved skill can match one or two requirements', () => {
+  assert.equal(profileMatch({skill_summary: 'React'}, ['react']).percent, 100);
+  assert.equal(profileMatch({skill_summary: 'React, SQL'}, ['sql']).percent, 50);
+  assert.equal(profileMatch({skill_summary: 'React, SQL'}, ['python']).percent, 0);
+  assert.equal(profileMatch({}, ['sql']).percent, null);
 });
 test('rounding cannot produce 100 unless every requirement is fully matched', () => {
   const skills = Array.from({length:199}, (_, i) => `skill${i}`);
@@ -51,8 +48,8 @@ test('rounding cannot produce 100 unless every requirement is fully matched', ()
   assert.equal(profileMatch(job, [...skills, 'sql server']).percent, 100);
 });
 
-test('global Best match sorts real percentages before sparse jobs, including zero percent', () => {
-  const sparse = {job_id:1, skill_summary:'react', resume_match_pct:100};
+test('global Best match sorts real percentages before jobs without requirements, including zero percent', () => {
+  const sparse = {job_id:1, skill_summary:'', resume_match_pct:100};
   const zero = {job_id:2, skill_summary:'java, go, rust', resume_match_pct:100};
   const high = {job_id:3, skill_summary:'react, python, sql', resume_match_pct:0};
   const low = {job_id:4, skill_summary:'react, java, go'};

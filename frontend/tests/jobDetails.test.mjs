@@ -40,6 +40,18 @@ test('detail uses grouped card requirements, consistent names, notices, and comp
     assert.match(matchedSkills, /<li class="wf-tag">Python<\/li>/);
     assert.match(matchedSkills, /<li class="wf-tag">React<\/li>/);
     assert.doesNotMatch(matchedSkills, /TypeScript|Observability/);
+    const exampleJob = {
+      ...job,
+      resume_requirement_groups: job.resume_requirement_groups.map(group =>
+        group.skills.includes('react') ? { ...group, kind: 'examples' } : group),
+      skill_evidence: { react: 'Frontend frameworks (React, TypeScript, etc.)' },
+    };
+    const examples = renderToStaticMarkup(createElement(JobDetailContent, {
+      job: exampleJob, profileSkills: ['python', 'react'],
+    }));
+    assert.match(examples, /50% skill match/);
+    assert.match(examples, /Matched examples \(half credit\) · React/);
+    assert.match(examples, /Frontend frameworks \(React, TypeScript, etc\.\)/);
     assert.ok(!html.includes('50%'));
     assert.ok(!html.match(/<dl>[\s\S]*?<\/dl>/)[0].includes('Not provided'));
     assert.ok(!html.includes('Work type not provided'));
@@ -64,7 +76,7 @@ test('detail uses grouped card requirements, consistent names, notices, and comp
   } finally { await server.close(); }
 });
 
-test('similar rows omit card details and thin matches disclose limited data', async () => {
+test('similar rows omit card details and single requirements can score 100%', async () => {
   const server = await createServer({ configFile: false, root: fileURLToPath(new URL('..', import.meta.url)), esbuild: { jsx: 'automatic' }, server: { middlewareMode: true, hmr: false, ws: false }, appType: 'custom' });
   try {
     const { default: CompactSimilarJob } = await server.ssrLoadModule('/src/components/CompactSimilarJob.jsx');
@@ -77,9 +89,8 @@ test('similar rows omit card details and thin matches disclose limited data', as
     row.props.children[1].props.children[0].props.children.props.onClick();
     assert.equal(opened, 42);
     const thin = renderToStaticMarkup(createElement(CompactSimilarJob, {job:{...job,resume_match_pct:100,resume_required_count:1,resume_matched_count:1,resume_requirement_groups:[{skills:['python']}]},profileSkills:['python'],goJob(){}}));
-    assert.ok(thin.includes('Skills not listed'));
-    assert.ok(!thin.includes('100%'));
-    assert.ok(!thin.includes('is-high'));
+    assert.ok(thin.includes('100%'));
+    assert.ok(thin.includes('is-high'));
   } finally { await server.close(); }
 });
 

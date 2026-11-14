@@ -48,6 +48,10 @@ KNOWN_SKILLS = [
     "prompt engineering", "retrieval-augmented generation",
     ".net", "replit", "v0.dev", "bolt.new", "collaboration", "debugging",
     "cypress", "playwright", "pulumi", "infrastructure as code", "devops",
+    "asp.net", "web development", "relational databases", "data integration",
+    "system architecture", "llm apis", "agent frameworks", "agentic ai",
+    "erp", "manufacturing operations", "business intelligence", "logistics",
+    "data science", "containerization", "web design", "dashboard development",
 ]
 
 REQUIRED_SIGNALS = [
@@ -80,7 +84,9 @@ _PREFERRED_SECTION_RE = re.compile(
     r"what\s+would\s+be\s+(great|a\s+plus))",
     re.IGNORECASE,
 )
-_PLAIN_QUALIFICATION_RE = re.compile(r"^\s*(?:qualifications|requirements|skills)\s*:\s*$", re.I)
+_PLAIN_QUALIFICATION_RE = re.compile(
+    r"^\s*(?:qualifications|requirements|skills(?: and tools)?|what we(?:['’]re| are) looking for)\s*:\s*$", re.I
+)
 
 
 def _split_into_sections(text):
@@ -91,7 +97,7 @@ def _split_into_sections(text):
     for line in lines:
         if _REQUIRED_SECTION_RE.match(line.strip()) or _PLAIN_QUALIFICATION_RE.match(line):
             current_tag = "required"
-        elif _PREFERRED_SECTION_RE.match(line.strip()):
+        elif _PREFERRED_SECTION_RE.match(line.strip().replace('-', ' ')):
             current_tag = "preferred"
         sections.append((current_tag, line))
     return sections
@@ -113,7 +119,11 @@ def _skill_pattern(skill):
     return r"(?<!\w)" + re.escape(skill) + r"(?!\w)"
 
 
-def _extract_sentence_groups(sentence, required_mentions):
+_EXAMPLE_LIST = re.compile(r"\((?:e\.g\.\s*([^()]+)|([^()]+),\s*(?:etc\.|or similar))\)", re.I)
+_TOOL_EXAMPLES = re.compile(r"\b(?:tools?|platforms?|frameworks?|technologies)\s*\(([^()]+)\)", re.I)
+
+
+def _extract_sentence_groups(sentence, required_mentions, example_groups=None):
     """Group required mentions into OR-alternative sets based on span overlaps and OR bridges."""
     if not required_mentions:
         return []
@@ -150,7 +160,7 @@ def _extract_sentence_groups(sentence, required_mentions):
                     line_groups[member] = combined
 
     # Parenthetical examples describe ways to satisfy one qualification.
-    for example in re.finditer(r"\((?:e\.g\.\s*([^()]+)|([^()]+),\s*etc\.)\)", sentence, re.I):
+    for example in _EXAMPLE_LIST.finditer(sentence):
         start, end = example.span(1 if example.group(1) is not None else 2)
         members = [index for index, (left, right, _) in enumerate(sorted_mentions)
                    if start <= left and right <= end]
@@ -161,6 +171,8 @@ def _extract_sentence_groups(sentence, required_mentions):
             combined = set().union(*(line_groups[index] for index in members))
             for index in members:
                 line_groups[index] = combined
+            if example_groups is not None:
+                example_groups.add(tuple(sorted(combined)))
 
     # Handle trailing framework alternatives
     if len(sorted_mentions) >= 2:
@@ -172,6 +184,18 @@ def _extract_sentence_groups(sentence, required_mentions):
             line_groups[-2] = line_groups[-1] = {first[2], second[2]}
 
     return [sorted(group) for group in line_groups]
+
+
+def _tool_candidates(sentence, mentions, kind):
+    for examples in _TOOL_EXAMPLES.finditer(sentence):
+        for item in re.finditer(r"[^,]+", examples[1]):
+            name = re.sub(r"^(?:e\.g\.\s*|(?:and|or)\s+)", "", item[0].strip(), flags=re.I)
+            start = examples.start(1) + item.start()
+            end = examples.start(1) + item.end()
+            if (name.lower().rstrip('.') != 'etc' and
+                    re.fullmatch(r"[A-Z0-9.][\w.+#-]*(?: [\w.+#-]+){0,2}", name)
+                    and not any(start <= left and right <= end for left, right, _ in mentions)):
+                yield {'name': name, 'requirement_type': kind, 'evidence': sentence}
 
 
 _PROGRAMMING_LANGUAGES = {
@@ -239,39 +263,28 @@ def hardware_skill_evidence(sentence):
         sentence, re.IGNORECASE))
 
 
-def _tag_plain_text(description, return_groups=False):
+def _tag_plain_text(description):
     """Tag skills for job."""
-    if not description:
-        return ([], []) if return_groups else []
-
-    tagged = {}
+    tagged, evidence, candidates = {}, {}, {}
     groups = []
-    for section_tag, line in _split_into_sections(description):
+    examples, explicit = set(), set()
+    for section_tag, line in _split_into_sections(description or ''):
         # Split requirements without breaking names like Node.js.
         for sentence in re.split(r"(?<!e\.g\.)(?<=[.!?;])\s+|\s+(?:but|whereas)\s+", line, flags=re.I):
             required_mentions = []
-            for s_start, s_end, skill in _mentions(sentence, qualification=section_tag != 'unknown'):
-                tag = _tag_sentence(sentence, section_tag)
+            mentions = _mentions(sentence, qualification=section_tag != 'unknown')
+            tag = _tag_sentence(sentence, section_tag)
+            if section_tag != 'unknown' or _AI_SKILL_CUES_RE.search(sentence):
+                for candidate in _tool_candidates(sentence, mentions, tag):
+                    candidates.setdefault(candidate['name'].casefold(), candidate)
+            for s_start, s_end, skill in mentions:
                 if tagged.get(skill) != "required":
                     tagged[skill] = tag
+                evidence.setdefault((skill, tag), sentence)
                 if tag == "required":
                     required_mentions.append((s_start, s_end, skill))
-            if return_groups and required_mentions:
-                groups.extend(_extract_sentence_groups(sentence, required_mentions))
-
-    if return_groups:
-        unique = {tuple(sorted(group)) for group in groups if group}
-        resolved_groups = [sorted(group) for group in sorted(unique) if not any(set(other) < set(group) for other in unique)]
-        covered = set().union(*resolved_groups) if resolved_groups else set()
-        for skill, kind in tagged.items():
-            if kind == "required" and skill not in covered:
-                tagged[skill] = "preferred"
-        skills = [{"skill_name": skill, "requirement_type": tagged[skill]}
-                  for skill in KNOWN_SKILLS if skill in tagged]
-        return skills, resolved_groups
-    skills = [{"skill_name": skill, "requirement_type": tagged[skill]}
-              for skill in KNOWN_SKILLS if skill in tagged]
-    return skills
+            _collect_groups(sentence, required_mentions, groups, examples, explicit)
+    return _skill_analysis(tagged, groups, examples, explicit, evidence, candidates, 'text_fallback')
 
 
 # These labels classify source-provided headings for extraction, never display cards.
@@ -285,6 +298,7 @@ _REQUIRED_HEADINGS = {
     'what experience should you have', 'experience', 'key qualifications',
     'basic requirements', 'minimum skills and experience', 'must have',
     'must haves', 'what you must have', 'what you bring to the table',
+    'skills and tools', 'what were looking for', 'what we are looking for',
 }
 _PREFERRED_HEADINGS = {
     'preferred', 'preferred qualifications', 'preferred skills', 'preferred experience',
@@ -305,6 +319,10 @@ _ALIASES = {
     'ai coding assistants': 'ai-assisted development', 'ai coding tools': 'ai-assisted development',
     'ai dev tools': 'ai-assisted development', 'ai developer tools': 'ai-assisted development',
     'bolt': 'bolt.new', 'restful apis': 'rest api', 'restful api': 'rest api',
+    'web applications': 'web development', 'relational database': 'relational databases',
+    'systems architecture': 'system architecture', 'llm api': 'llm apis',
+    'agent framework': 'agent frameworks', 'ai-assisted coding': 'ai-assisted development',
+    'containers': 'containerization', 'software dashboards': 'dashboard development',
     'claude': 'claude code', 'copilot': 'github copilot', 'codex': 'openai codex',
     'rag': 'retrieval-augmented generation', 'retrieval augmented generation': 'retrieval-augmented generation',
 }
@@ -317,7 +335,7 @@ def _mentions(text, qualification=False):
             raw_mentions.append((match.start(), match.end(), skill))
     all_skills = set(s for _, _, s in raw_mentions)
     specific_ai = [(start, end) for start, end, skill in raw_mentions
-                   if skill in {'generative ai', 'ai-assisted development'}]
+                   if skill in {'generative ai', 'ai-assisted development', 'agentic ai'}]
     qualified_tools = [(start, end, skill) for start, end, skill in raw_mentions
                        if text[start:end].lower() in {'claude code', 'github copilot', 'openai codex'}]
     filtered = [
@@ -367,15 +385,21 @@ def analyze_job_skills(description, description_html=None):
     labeled = []
     scope, scope_level, content = None, None, ''
     for element in soup.children:
-        if getattr(element, 'name', None) and is_heading(element):
+        if getattr(element, 'name', None) in {'p', 'h2', 'h3', 'h4'}:
             title = element.get_text(' ', strip=True).lower().replace('&', ' and ').replace('-', ' ')
             title = re.sub(r'\s+', ' ', re.sub(r'[^a-z0-9 ]', '', title)).strip()
             if title in _REQUIRED_HEADINGS or title.startswith('minimum requirements'):
                 kind = 'required'
-            elif title in _PREFERRED_HEADINGS or title.startswith(('an ideal candidate', 'bonus points for ')):
+            elif title in _PREFERRED_HEADINGS or re.match(
+                r'^(?:an ideal candidate|bonus points|nice to have|extra credit|preferred qualifications)(?:\b|$)', title
+            ):
                 kind = 'preferred'
             else:
                 kind = None
+            if not is_heading(element) and not kind:
+                if scope:
+                    content += str(element)
+                continue
             level = int(element.name[1]) if element.name in ('h2', 'h3', 'h4') else 2
             if not kind and scope and level > scope_level:
                 # A lower-level heading belongs to its qualification parent.
@@ -392,29 +416,46 @@ def analyze_job_skills(description, description_html=None):
     if not any(kind == 'required' for kind, _ in labeled):
         labeled = []
     if not labeled:
-        tags, groups = _tag_plain_text(description or '\n'.join(_html_lines(soup)), return_groups=True)
-        return {'skills': tags, 'required_groups': groups, 'source': 'text_fallback'}
+        return _tag_plain_text(description or '\n'.join(_html_lines(soup)))
     tagged, groups = {}, []
+    evidence, examples, explicit = {}, set(), set()
+    candidates = {}
     for default, fragment in labeled:
         soup = BeautifulSoup(fragment, 'html.parser')
         for line in _html_lines(soup):
             for sentence in re.split(r'(?<!e\.g\.)(?<=[.!?;])\s+', line, flags=re.I):
                 mentions = _mentions(sentence, qualification=True)
+                for candidate in _tool_candidates(sentence, mentions, default):
+                    candidates.setdefault(candidate['name'].casefold(), candidate)
                 required_mentions = []
                 for start, end, skill in mentions:
                     # A local "Python preferred" must not downgrade JavaScript or TypeScript.
                     before, after = sentence[max(0, start - 35):start], sentence[end:end + 45]
                     local_preference = bool(re.match(r'\s*(?:is\s+)?(?:preferred|desired|is a plus|would be a plus|nice to have)\b', after, re.I)
                                             or re.search(r'\b(?:preferably|ideally)\s*$', before, re.I))
-                    whole_preference = bool(re.match(r'^\s*(?:preferred|nice to have|bonus)\b', sentence, re.I))
+                    whole_preference = bool(re.match(r'^\s*(?:preferred|nice[- ]to[- ]have|bonus)\b', sentence, re.I)
+                                            or re.search(r'\b(?:is|would be) a plus[.!]?$', sentence, re.I))
                     kind = 'preferred' if local_preference or whole_preference else default
                     if default == 'preferred' and _REQUIRED_RE.search(sentence):
                         kind = 'required'
                     if tagged.get(skill) != 'required':
                         tagged[skill] = kind
+                    evidence.setdefault((skill, kind), sentence)
                     if kind == 'required':
                         required_mentions.append((start, end, skill))
-                groups.extend(_extract_sentence_groups(sentence, required_mentions))
+                _collect_groups(sentence, required_mentions, groups, examples, explicit)
+    return _skill_analysis(tagged, groups, examples, explicit, evidence, candidates, 'qualification_html')
+
+
+def _collect_groups(sentence, mentions, groups, examples, explicit):
+    sentence_examples = set()
+    sentence_groups = _extract_sentence_groups(sentence, mentions, sentence_examples)
+    examples.update(sentence_examples)
+    explicit.update(tuple(group) for group in sentence_groups if tuple(group) not in sentence_examples)
+    groups.extend(sentence_groups)
+
+
+def _skill_analysis(tagged, groups, examples, explicit, evidence, candidates, source):
     # A single explicit mention elsewhere still makes a skill individually required.
     unique = {tuple(sorted(group)) for group in groups if group}
     groups = [sorted(group) for group in sorted(unique) if not any(set(other) < set(group) for other in unique)]
@@ -423,7 +464,10 @@ def analyze_job_skills(description, description_html=None):
         if kind == "required" and skill not in covered:
             tagged[skill] = "preferred"
     return {'skills': [{'skill_name': skill, 'requirement_type': tagged[skill]} for skill in KNOWN_SKILLS if skill in tagged],
-            'required_groups': groups, 'source': 'qualification_html'}
+            'required_groups': groups, 'example_groups': [group for group in groups if tuple(group) in examples - explicit],
+            'evidence': {skill: evidence[(skill, kind)] if (skill, kind) in evidence else evidence[(skill, 'required')]
+                         for skill, kind in tagged.items()},
+            'candidates': list(candidates.values()), 'source': source}
 
 
 def tag_skills_for_job(description, description_html=None):

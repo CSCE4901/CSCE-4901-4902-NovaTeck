@@ -43,12 +43,16 @@ test('loading, empty and retry states expose appropriate semantics and actions',
   assert.ok(renderToStaticMarkup(createElement(JobsError,{message:'Try again later',onRetry(){}})).includes('role="alert"'));
 }));
 
-test('sparse requirements render a neutral ring even with all extracted skills matched',()=>withModules(async server=>{
+test('job cards distinguish zero, one and two listed requirements',()=>withModules(async server=>{
   const {default:Card}=await server.ssrLoadModule('/src/components/LaunchpadJobCard.jsx');
   for (const count of [0,1,2]) {
     const job={...sample,resume_requirement_groups:sample.resume_requirement_groups.slice(0,count)};
     const html=renderToStaticMarkup(createElement(Card,{job,goJob(){},onSave(){},profileSkills:['react','python','sql']}));
-    assert.ok(html.includes('Skills not listed'));
-    assert.ok(!html.includes('%'));
+    if (count === 0) assert.ok(html.includes('Skills not listed'));
+    else assert.match(html, /100<small>%/);
+    if (count > 0) {
+      const noMatch = renderToStaticMarkup(createElement(Card,{job,goJob(){},onSave(){},profileSkills:['unrelated skill']}));
+      assert.ok(noMatch.includes('No match'));
+    }
   }
 }));

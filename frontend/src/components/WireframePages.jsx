@@ -16,7 +16,7 @@ import CompanyLogo from './CompanyLogo';
 import { parseJobDescription, formatPostedDate } from './jobDescriptionText';
 import './JobDetailsPolish.css';
 import { profileMatch, sortJobsByProfileMatch } from './profileMatch';
-import { JobMatchInfo, JobSourceInfo } from './JobDetailsInfo';
+import { JobMatchInfo, JobSkillEvidence, JobSourceInfo } from './JobDetailsInfo';
 import SkillGapPage from './SkillGapPage';
 import { Confetti, SkillReward } from './Celebration';
 
@@ -198,8 +198,8 @@ export function JobDetailContent({ job, profileSkills, similar = [], saved, save
     <div className="wf-detail-columns"><div>
       <JobDescription content={descriptionContent} />
       <JobQualifications content={descriptionContent} preferredSkills={preferredSkills} />
-      <section className="wf-card nova-detail-skills"><SectionHeading name="skills">Required Skills</SectionHeading><Tags values={requiredSkills} /></section>
-      <section className="wf-card nova-detail-skills nova-your-match"><SectionHeading name="match">Skill Match</SectionHeading><ResumeMatch job={job} profileSkills={profileSkills} />{typeof pct === 'number' && <div className="nova-detail-match-row"><div className="wf-match-bar" role="meter" aria-label="Skill match" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}><span style={{ width: `${pct}%` }} /></div><strong>{pct}%</strong></div>}<JobMatchInfo match={match} /><SkillReward percent={pct} eligible={pct === 100 && match.groups.length >= 3 && match.matched === match.groups.length} name="Job Ready" scope={jobId} celebrate={false} /></section>
+      <section className="wf-card nova-detail-skills"><SectionHeading name="skills">Required Skills</SectionHeading><Tags values={requiredSkills} /><JobSkillEvidence evidence={job.skill_evidence} /></section>
+      <section className="wf-card nova-detail-skills nova-your-match"><SectionHeading name="match">Skill Match</SectionHeading><ResumeMatch job={job} profileSkills={profileSkills} />{pct > 0 && <div className="nova-detail-match-row"><div className="wf-match-bar" role="meter" aria-label="Skill match" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}><span style={{ width: `${pct}%` }} /></div><strong>{pct}%</strong></div>}<JobMatchInfo match={match} /><SkillReward percent={pct} eligible={pct === 100 && match.groups.length >= 3 && match.matched === match.groups.length} name="Job Ready" scope={jobId} celebrate={false} /></section>
       <section><h2>Similar Jobs</h2><p className="nova-profile-match-note">Matches use your saved profile skills.</p>{similar.length ? similar.map(row => <CompactSimilarJob job={row} profileSkills={profileSkills} goJob={goJob} key={row.job_id} />) : <p className="wf-empty">No similar active jobs with matching skills found.</p>}{similarTotal > 3 && !showAllSimilar && <button type="button" className="text-button nova-view-similar" onClick={loadAllSimilar}>View all similar ({similarTotal})</button>}</section>
       <EmployerDetails content={descriptionContent} />
     </div><aside className="wf-card wf-overview"><h2>Job Overview</h2><dl>{overview.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{listed(value) ? value : <span className="nova-not-listed">Not listed</span>}</dd></div>)}</dl></aside></div>

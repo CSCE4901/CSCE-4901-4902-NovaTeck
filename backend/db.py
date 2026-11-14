@@ -1158,14 +1158,11 @@ def get_saved_resume(user_id, include_content=False):
 
 
 @lru_cache(maxsize=256)
-def _posting_requirement_groups(description_html):
+def posting_skill_analysis(description_html, description=''):
     """Reuse the extracted alternatives until the employer description changes."""
     from nlp_tagger import analyze_job_skills
 
-    analysis = analyze_job_skills('', description_html)
-    if analysis['source'] != 'qualification_html':
-        return None
-    return tuple(frozenset(group) for group in analysis['required_groups'])
+    return analyze_job_skills(description, description_html)
 
 
 def add_resume_matches(user_id, jobs, profile_override=None):
@@ -1184,42 +1181,50 @@ def add_resume_matches(user_id, jobs, profile_override=None):
     skills = {str(skill).strip().lower() for skill in saved_skills if str(skill).strip()}
     ids = list(dict.fromkeys(job['job_id'] for job in jobs))
     required = {job_id: set() for job_id in ids}
-    html_by_job = {}
+    descriptions = {}
     with get_connection() as conn:
         cur = conn.cursor(dictionary=True)
         placeholders = ','.join(['%s'] * len(ids))
-        cur.execute(f'''SELECT js.job_id, s.skill_name, j.description_html FROM Job_Skills js
+        cur.execute(f'''SELECT js.job_id, s.skill_name, j.description_html,
+            CASE WHEN j.description_html IS NULL OR j.description_html = '' THEN j.description END AS description
+            FROM Job_Skills js
             JOIN Skills s ON s.skill_id = js.skill_id
             JOIN Jobs j ON j.job_id=js.job_id
             WHERE js.requirement_type = 'required' AND js.job_id IN ({placeholders})''', ids)
         for row in cur.fetchall():
             required[row['job_id']].add(row['skill_name'].strip().lower())
-            html_by_job[row['job_id']] = row.get('description_html')
+            descriptions[row['job_id']] = (row.get('description_html'), row.get('description') or '')
     result = []
     for job in jobs:
         needed = required[job['job_id']]
         groups = [{skill} for skill in sorted(needed)]
+        example_groups = set()
         extraction_source = 'text_fallback'
-        html = html_by_job.get(job['job_id'])
-        if html:
-            extracted_groups = _posting_requirement_groups(html)
-            if extracted_groups is not None:
-                extraction_source = 'qualification_html'
+        html, description = descriptions.get(job['job_id'], (None, ''))
+        if html or description:
+            analysis = posting_skill_analysis(html, description)
+            if analysis['source'] == 'qualification_html' or analysis['example_groups']:
+                extraction_source = analysis['source']
                 # Do not include new HTML tags until a job has been retagged.
-                candidates = [group & needed for group in extracted_groups]
-                groups = [group for group in candidates if group]
+                candidates = [set(group) & needed for group in analysis['required_groups']]
+                example_groups = {frozenset(group) & needed for group in analysis['example_groups']}
+                groups = list(dict.fromkeys(frozenset(group) for group in candidates if group))
                 covered = set().union(*groups) if groups else set()
                 groups += [{skill} for skill in sorted(needed - covered)]
         outcomes, matched_skills, partial_skills, missing_skills = [], set(), set(), set()
         for group in groups:
             hits = group & skills
-            partial = not hits and 'sql server' in group and 'sql' in skills
-            status = 'matched' if hits else 'partial' if partial else 'missing'
-            outcomes.append({'skills': sorted(group), 'status': status})
-            if hits:
+            is_example = frozenset(group) in example_groups
+            partial_sql = not hits and 'sql server' in group and 'sql' in skills
+            status = 'partial' if partial_sql or (is_example and hits) else 'matched' if hits else 'missing'
+            outcome = {'skills': sorted(group), 'status': status}
+            if is_example:
+                outcome['kind'] = 'examples'
+            outcomes.append(outcome)
+            if status == 'matched':
                 matched_skills.update(hits)
-            elif partial:
-                partial_skills.add('sql server')
+            elif status == 'partial':
+                partial_skills.update(hits or {'sql server'})
             else:
                 missing_skills.update(group)
         total = len(groups)

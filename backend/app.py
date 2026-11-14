@@ -344,6 +344,10 @@ def get_job(job_id):
     job = db.get_job_by_id(job_id)
     if not job:
         return jsonify({"error": "Job not found"}), 404
+    if job.get('description_html') or job.get('description'):
+        evidence = db.posting_skill_analysis(job.get('description_html'), job.get('description') or '')['evidence']
+        job['skill_evidence'] = {row['skill_name'].lower(): evidence[row['skill_name'].lower()]
+                                 for row in job.get('skills', []) if row['skill_name'].lower() in evidence}
     return jsonify_safe(db.add_resume_matches(request.user_id, [job])[0])
 
 

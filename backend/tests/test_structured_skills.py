@@ -5,6 +5,49 @@ from nlp_tagger import analyze_job_skills
 FIXTURES = Path(__file__).parent / 'fixtures' / 'job_html'
 
 class StructuredSkillTests(unittest.TestCase):
+    def test_moonshot_skills_and_tools_subsection_and_nice_to_have(self):
+        html = """
+        <h2>Qualifications</h2><p><strong>Experience:</strong></p>
+        <ul><li>Experience working with relational databases (SQL)</li>
+        <li>Experience with ERP systems, manufacturing operations, or business intelligence tools is a plus</li></ul>
+        <p><strong>Skills and Tools:</strong></p>
+        <ul><li>Programming languages (Python, JavaScript/TypeScript, C#, or similar)</li>
+        <li>Web frameworks (React, Vue, Angular, Django, Flask, ASP.NET, or similar)</li>
+        <li>Familiarity with REST APIs, data integration patterns, and system architecture</li>
+        <li>Version control (Git)</li>
+        <li>AI-assisted coding with LLM APIs and agent frameworks</li></ul>
+        <p>Nice-to-have:</p>
+        <ul><li>Logistics, agentic AI, data science, containers, web design and software dashboards</li></ul>
+        <h2>Benefits</h2><p>Free AWS training.</p>
+        """
+        result = analyze_job_skills('', html)
+        tags = {tag['skill_name']: tag['requirement_type'] for tag in result['skills']}
+        for skill in ('sql', 'python', 'javascript', 'typescript', 'c#', 'react', 'vue', 'angular',
+                      'django', 'flask', 'asp.net', 'rest api', 'data integration', 'system architecture',
+                      'git', 'ai-assisted development', 'llm apis', 'agent frameworks'):
+            self.assertEqual(tags.get(skill), 'required', skill)
+        for skill in ('erp', 'manufacturing operations', 'business intelligence', 'logistics', 'agentic ai',
+                      'data science', 'containerization', 'web design', 'dashboard development'):
+            self.assertEqual(tags.get(skill), 'preferred', skill)
+        self.assertIn(['c#', 'javascript', 'python', 'typescript'], result['example_groups'])
+        self.assertNotIn('aws', tags)
+
+    def test_examples_evidence_and_unknown_tools(self):
+        html = ('<h2>Requirements</h2><p>Backend technologies (Python, Java, etc.)</p>'
+                '<p>React or Angular</p><h2>Extra credit for experience with</h2>'
+                '<p>Prototyping tools (Replit, BuildKitty)</p>')
+        result = analyze_job_skills('', html)
+        self.assertEqual(result['example_groups'], [['java', 'python']])
+        self.assertIn(['angular', 'react'], result['required_groups'])
+        self.assertEqual(result['evidence']['python'], 'Backend technologies (Python, Java, etc.)')
+        self.assertEqual(result['candidates'], [{
+            'name': 'BuildKitty', 'requirement_type': 'preferred',
+            'evidence': 'Prototyping tools (Replit, BuildKitty)',
+        }])
+        self.assertNotIn('buildkitty', {tag['skill_name'] for tag in result['skills']})
+        plain = analyze_job_skills('Requirements:\nBackend technologies (Python, Java, etc.)')
+        self.assertEqual(plain['example_groups'], [['java', 'python']])
+
     def test_torq_qualification_examples_and_preferred_tools(self):
         html = """<h2>Qualifications</h2><h2>What You Bring to the Table</h2>
         <ul><li>Hands-on experience with AI dev tools (Copilot, Claude, Cursor, etc.)</li>
@@ -376,7 +419,7 @@ Ability to deliver complex projects independently while collaborating effectivel
         self.assertEqual(tags.get('next.js'), 'preferred')
         self.assertEqual(tags.get('node.js'), 'preferred')
         self.assertEqual(tags.get('fastapi'), 'preferred')
-        self.assertEqual(res['required_groups'], [['react']])
+        self.assertEqual(res['required_groups'], [['react'], ['web development']])
 
     def test_frameworks_with_singleton_plain_text_path(self):
         text = """Requirements:
@@ -390,7 +433,7 @@ Ability to deliver complex projects independently while collaborating effectivel
         self.assertEqual(tags.get('next.js'), 'preferred')
         self.assertEqual(tags.get('node.js'), 'preferred')
         self.assertEqual(tags.get('fastapi'), 'preferred')
-        self.assertEqual(res['required_groups'], [['react']])
+        self.assertEqual(res['required_groups'], [['react'], ['web development']])
 
     def test_prefix_headings_recognized(self):
         html_prefix = """

@@ -10,6 +10,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--backup', type=Path, help='Save previous tags before applying changes.')
+    parser.add_argument('--review-candidates', action='store_true', help='Print unfamiliar tool names and their employer wording.')
     args = parser.parse_args()
     with db.get_connection() as conn:
         cur = conn.cursor(dictionary=True)
@@ -26,6 +27,9 @@ def main():
     for job in jobs:
         try:
             analysis = analyze_job_skills(job['description'], job['description_html'])
+            if args.review_candidates:
+                for candidate in analysis['candidates']:
+                    print(json.dumps({'job_id': job['job_id'], **candidate}))
             counts[analysis['source']] += 1
             tags = analysis['skills']
             if {(tag['skill_name'], tag['requirement_type']) for tag in tags} != old.get(job['job_id'], set()):
