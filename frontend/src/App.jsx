@@ -318,19 +318,24 @@ export function Navbar({ page, setPage, logout, auth, theme, deviceTheme, setThe
 
 // LoginPage
 function LoginPage({ onLogin, setPage, sessionMessage }) {
-  const [form, setForm] = useState({ email: "", password: "" });
+  const formRef = useRef(null);
   const [err, setErr]   = useState("");
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit() {
+    const form = formRef.current;
+    if (loading || !form.reportValidity()) return;
+    const fields = new FormData(form);
+    const email = fields.get("login-email").trim();
+    const password = fields.get("login-password");
     setErr("");
-    if (!EMAIL_PATTERN.test(form.email.trim())) {
+    if (!EMAIL_PATTERN.test(email)) {
       setErr("Enter a valid email address.");
       return;
     }
     setLoading(true);
     try {
-      const data = await apiFetch("/auth/login", { method: "POST", body: JSON.stringify(form) });
+      const data = await apiFetch("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
       onLogin(data.token, { user_id: data.user_id, name: data.name, role: data.role });
     } catch (e) { setErr(e.message); }
     setLoading(false);
@@ -338,11 +343,11 @@ function LoginPage({ onLogin, setPage, sessionMessage }) {
 
   return (
     <AuthLayout title="Sign In" variant="login" setPage={setPage}>
-      <form className="auth-form" onSubmit={event => { event.preventDefault(); handleSubmit(); }}>
+      <form ref={formRef} className="auth-form" onSubmit={event => event.preventDefault()}>
         {(err || sessionMessage) && <div className="auth-form-message"><Alert msg={err || sessionMessage} /></div>}
-        <AuthField id="login-email" label="Email address" type="email" autoComplete="username" value={form.email} onChange={email => setForm(current => ({ ...current, email }))} />
-        <AuthField id="login-password" label="Password" type="password" autoComplete="current-password" value={form.password} onChange={password => setForm(current => ({ ...current, password }))} />
-        <div className="auth-actions"><button className="primary-button auth-submit" type="submit" disabled={loading}>{loading ? "Signing in…" : "Sign In"}</button></div>
+        <AuthField id="login-email" label="Email address" type="email" autoComplete="username" />
+        <AuthField id="login-password" label="Password" type="password" autoComplete="current-password" />
+        <div className="auth-actions"><button className="primary-button auth-submit" type="button" onClick={handleSubmit} disabled={loading}>{loading ? "Signing in…" : "Sign In"}</button></div>
         <div className="auth-links">
           <p>Don't have an account? <button className="text-button" type="button" onClick={() => setPage("register")}>Register Here</button></p>
           <p><button className="text-button" type="button" onClick={() => setPage("forgot")}>Forgot Password?</button></p>
@@ -364,7 +369,7 @@ function AuthField({ id, label, type = "text", value, onChange, autoComplete, pl
   return <div className="auth-field">
     <label htmlFor={id}>{label} :</label>
     <div className="auth-field-control">
-      <input id={id} name={id} type={type} value={value} onChange={event => onChange(event.target.value)} autoComplete={autoComplete} placeholder={placeholder} required aria-invalid={error ? true : undefined} aria-describedby={[describedBy, error && `${id}-error`].filter(Boolean).join(" ") || undefined} />
+      <input id={id} name={id} type={type} value={value} onChange={onChange && (event => onChange(event.target.value))} autoComplete={autoComplete} placeholder={placeholder} required aria-invalid={error ? true : undefined} aria-describedby={[describedBy, error && `${id}-error`].filter(Boolean).join(" ") || undefined} />
       {children}
       {error && <p id={`${id}-error`} className="auth-field-error" role="alert">{error}</p>}
     </div>
