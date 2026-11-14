@@ -15,7 +15,7 @@ class AcceptanceDefectTests(unittest.TestCase):
                 'with a Bachelor’s degree; or 6 years and a Master’s degree; or 4 years with a PhD; '
                 'or equivalent work experience. Powershell, Ansible and Python are nice to have. '
                 'Must have top secret clearance. Linux required.')
-        self.assertEqual(self.tags(text), {'python': 'preferred', 'linux': 'required'})
+        self.assertEqual(self.tags(text), {'python': 'preferred', 'linux': 'required', 'ansible': 'preferred'})
         self.assertIn('7 years', extract_experience(text))
         self.assertIn('4 years with a PhD', extract_experience(text))
 

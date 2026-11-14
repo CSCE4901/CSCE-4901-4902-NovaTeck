@@ -32,6 +32,48 @@ class StructuredSkillTests(unittest.TestCase):
         self.assertEqual(result['source'], 'text_fallback')
         self.assertEqual(result['required_groups'], [['python']])
 
+    def test_plain_text_captures_slash_separated_skills_and_aliases(self):
+        result = analyze_job_skills('Experience with C++/Python and Node.js/React. Golang required.')
+        self.assertEqual(result['required_groups'], [['c++', 'python'], ['go'], ['node.js', 'react']])
+
+    def test_html_skills_survive_mixed_paragraphs_breaks_and_bare_text(self):
+        html = ('<h2>Must-have</h2>Databricks<br>Apache Airflow'
+                '<p>Experience with <strong>C++</strong>/Python</p>'
+                'Ansible<h2>Nice-to-have</h2><p>RabbitMQ</p>')
+        result = analyze_job_skills('', html)
+        tags = {tag['skill_name']: tag['requirement_type'] for tag in result['skills']}
+        self.assertEqual(tags, {
+            'databricks': 'required', 'apache airflow': 'required',
+            'c++': 'required', 'python': 'required', 'ansible': 'required',
+            'rabbitmq': 'preferred',
+        })
+        self.assertIn(['c++', 'python'], result['required_groups'])
+
+    def test_html_only_posting_without_headings_uses_visible_text(self):
+        result = analyze_job_skills('', '<p>Experience with OAuth and Ansible.</p>')
+        self.assertEqual(result['required_groups'], [['ansible'], ['oauth']])
+
+    def test_ai_tools_are_tagged_from_qualification_context(self):
+        html = """<p>We are an AI-powered company.</p>
+        <h2>Requirements</h2><ul><li>AI experience</li>
+        <li>Use Claude Code or GitHub Copilot.</li></ul>
+        <h2>Preferred qualifications</h2>
+        <p>Exposure to AI-assisted development tools (Claude or Cursor).</p>
+        <p>Move the cursor to the end of the line.</p>"""
+        result = analyze_job_skills('', html)
+        self.assertEqual(result['required_groups'], [
+            ['artificial intelligence'], ['claude code', 'github copilot'],
+        ])
+        tags = {tag['skill_name']: tag['requirement_type'] for tag in result['skills']}
+        self.assertEqual(tags['cursor'], 'preferred')
+        self.assertEqual(tags['ai-assisted development'], 'preferred')
+
+    def test_plain_text_keeps_ai_branding_and_ordinary_cursor_out_of_tags(self):
+        text = 'We are an AI-powered company. Move the cursor to the next line.\nExperience with generative AI and Claude Code.'
+        result = analyze_job_skills(text)
+        self.assertEqual(result['required_groups'], [['claude code'], ['generative ai']])
+        self.assertEqual(analyze_job_skills('We are an AI company.')['skills'], [])
+
     def test_either_option_is_one_group_but_and_is_two(self):
         html = '<h2>Requirements</h2><ul><li>React or Angular</li><li>SQL and Python</li></ul>'
         result = analyze_job_skills('', html)
