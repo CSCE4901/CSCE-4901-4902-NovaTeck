@@ -46,6 +46,8 @@ KNOWN_SKILLS = [
     "claude code", "github copilot", "cursor", "openai codex",
     "chatgpt", "gemini cli", "windsurf", "amazon q developer",
     "prompt engineering", "retrieval-augmented generation",
+    ".net", "replit", "v0.dev", "bolt.new", "collaboration", "debugging",
+    "cypress", "playwright", "pulumi", "infrastructure as code", "devops",
 ]
 
 REQUIRED_SIGNALS = [
@@ -147,7 +149,20 @@ def _extract_sentence_groups(sentence, required_mentions):
                 for member in range(first, index + 1):
                     line_groups[member] = combined
 
-    # 3. Handle trailing framework alternatives
+    # Parenthetical examples describe ways to satisfy one qualification.
+    for example in re.finditer(r"\((?:e\.g\.\s*([^()]+)|([^()]+),\s*etc\.)\)", sentence, re.I):
+        start, end = example.span(1 if example.group(1) is not None else 2)
+        members = [index for index, (left, right, _) in enumerate(sorted_mentions)
+                   if start <= left and right <= end]
+        if members:
+            members.extend(index for index, (_, right, skill) in enumerate(sorted_mentions)
+                           if skill == 'ai-assisted development' and right <= example.start()
+                           and not sentence[right:example.start()].strip())
+            combined = set().union(*(line_groups[index] for index in members))
+            for index in members:
+                line_groups[index] = combined
+
+    # Handle trailing framework alternatives
     if len(sorted_mentions) >= 2:
         first, second = sorted_mentions[-2:]
         frameworks = {'react', 'angular', 'vue', 'next.js'}
@@ -173,7 +188,7 @@ _AI_SKILL_CUES_RE = re.compile(
 )
 _CODING_ASSISTANT_CUES_RE = re.compile(
     r"\b(?:ai[- ](?:assisted|powered)|coding\s+(?:assistants?|tools?|agents?)|"
-    r"developer\s+tools?|github copilot|claude code|gemini cli|openai codex)\b", re.IGNORECASE,
+    r"(?:dev|developer)\s+tools?|github copilot|claude code|gemini cli|openai codex)\b", re.IGNORECASE,
 )
 
 
@@ -197,6 +212,10 @@ def _is_valid_evidence_mention(skill, sentence, start, end, all_skills, qualific
     if skill == 'go' and not _is_valid_go_mention(sentence, start, end, all_skills):
         return False
     mention = sentence[start:end].lower()
+    if skill == 'bolt.new' and mention == 'bolt':
+        return bool(re.search(r"\b(?:rapid prototyping|replit|v0\.dev)\b", sentence, re.I))
+    if skill == 'cypress':
+        return qualification or bool(re.search(r"\b(?:test(?:s|ing)?|playwright|selenium)\b", sentence, re.I))
     if skill == 'artificial intelligence':
         # Keep generic AI branding out of tags and avoid matching AI inside a more specific skill.
         adjacent = sentence[end:]
@@ -229,7 +248,7 @@ def _tag_plain_text(description, return_groups=False):
     groups = []
     for section_tag, line in _split_into_sections(description):
         # Split requirements without breaking names like Node.js.
-        for sentence in re.split(r"(?<=[.!?;])\s+|\s+(?:but|whereas)\s+", line):
+        for sentence in re.split(r"(?<!e\.g\.)(?<=[.!?;])\s+|\s+(?:but|whereas)\s+", line, flags=re.I):
             required_mentions = []
             for s_start, s_end, skill in _mentions(sentence, qualification=section_tag != 'unknown'):
                 tag = _tag_sentence(sentence, section_tag)
@@ -265,7 +284,7 @@ _REQUIRED_HEADINGS = {
     'requirements and qualifications', 'required skills and experience',
     'what experience should you have', 'experience', 'key qualifications',
     'basic requirements', 'minimum skills and experience', 'must have',
-    'must haves', 'what you must have',
+    'must haves', 'what you must have', 'what you bring to the table',
 }
 _PREFERRED_HEADINGS = {
     'preferred', 'preferred qualifications', 'preferred skills', 'preferred experience',
@@ -284,6 +303,8 @@ _ALIASES = {
     'ai': 'artificial intelligence', 'genai': 'generative ai',
     'gen ai': 'generative ai', 'ai-assisted development tools': 'ai-assisted development',
     'ai coding assistants': 'ai-assisted development', 'ai coding tools': 'ai-assisted development',
+    'ai dev tools': 'ai-assisted development', 'ai developer tools': 'ai-assisted development',
+    'bolt': 'bolt.new', 'restful apis': 'rest api', 'restful api': 'rest api',
     'claude': 'claude code', 'copilot': 'github copilot', 'codex': 'openai codex',
     'rag': 'retrieval-augmented generation', 'retrieval augmented generation': 'retrieval-augmented generation',
 }
@@ -377,7 +398,7 @@ def analyze_job_skills(description, description_html=None):
     for default, fragment in labeled:
         soup = BeautifulSoup(fragment, 'html.parser')
         for line in _html_lines(soup):
-            for sentence in re.split(r'(?<=[.!?;])\s+', line):
+            for sentence in re.split(r'(?<!e\.g\.)(?<=[.!?;])\s+', line, flags=re.I):
                 mentions = _mentions(sentence, qualification=True)
                 required_mentions = []
                 for start, end, skill in mentions:

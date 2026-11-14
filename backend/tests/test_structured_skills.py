@@ -5,6 +5,31 @@ from nlp_tagger import analyze_job_skills
 FIXTURES = Path(__file__).parent / 'fixtures' / 'job_html'
 
 class StructuredSkillTests(unittest.TestCase):
+    def test_torq_qualification_examples_and_preferred_tools(self):
+        html = """<h2>Qualifications</h2><h2>What You Bring to the Table</h2>
+        <ul><li>Hands-on experience with AI dev tools (Copilot, Claude, Cursor, etc.)</li>
+        <li>Solid knowledge of backend technologies (Python, Java, Node.js, .NET, etc.)</li>
+        <li>Familiarity with frontend frameworks (React, Next.js, etc.)</li>
+        <li>Rapid prototyping tools (Replit, v0.dev, Bolt, etc.)</li>
+        <li>Strong communication and collaboration skills</li></ul>
+        <h2>Preferred Skills</h2>
+        <ul><li>Test automation frameworks (e.g. Cypress, Playwright, Selenium)</li>
+        <li>Infrastructure as code (e.g. Terraform, Pulumi) or DevOps tooling</li></ul>"""
+        result = analyze_job_skills('', html)
+        self.assertEqual(result['source'], 'qualification_html')
+        for group in [
+            ['ai-assisted development', 'claude code', 'cursor', 'github copilot'],
+            ['.net', 'java', 'node.js', 'python'],
+            ['next.js', 'react'],
+            ['bolt.new', 'replit', 'v0.dev'],
+            ['collaboration'],
+            ['communication'],
+        ]:
+            self.assertIn(group, result['required_groups'])
+        tags = {tag['skill_name']: tag['requirement_type'] for tag in result['skills']}
+        for skill in ('cypress', 'playwright', 'selenium', 'pulumi', 'terraform', 'devops'):
+            self.assertEqual(tags[skill], 'preferred')
+
     def analyze(self, identity):
         return analyze_job_skills('', (FIXTURES / f'coreweave-{identity}.html').read_text())
 
