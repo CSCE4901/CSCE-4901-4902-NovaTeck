@@ -200,6 +200,20 @@ def main():
         assert profile_before <= set(db.get_user_skills(user))
         assert not {row['unmatched_id'] for row in db.get_flagged_skills(user)} & set(batch)
         assert client.get('/api/resume/saved/file', headers=headers).data == replacement
+        stale_id, _ = db.upsert_job(company, 'Stale Engineer', 'https://example.test/stale', provider='integration')
+        assert db.save_job(user, stale_id)
+        db.insert_snapshot(stale_id, 'Stale Engineer', None, True)
+        db.replace_job_skills(stale_id, [{'skill_name': 'sql', 'requirement_type': 'required'}])
+        db.deactivate_jobs([stale_id])
+        assert stale_id not in {job['job_id'] for job in db.get_saved_jobs(user)}
+        assert not db.save_job(user, first_id)
+        assert db.purge_unavailable_jobs() >= 2
+        with db.get_connection() as conn:
+            cur = conn.cursor()
+            for table in ('Jobs', 'Saved_Jobs', 'Job_Skills', 'Job_Snapshots'):
+                cur.execute(f'SELECT COUNT(*) FROM {table} WHERE job_id IN (%s, %s)', (stale_id, first_id))
+                assert cur.fetchone()[0] == 0
+        assert db.get_job_by_id(impact_id)
         print('PASS: fresh schema, repeated migrations, registration, real PDF upload, duplicate prevention, owner/admin access, approve/reject, profile persistence, application statuses, admin overview, unchanged skill-gap results')
     finally:
         cursor.execute(f'DROP DATABASE IF EXISTS `{name}`')
