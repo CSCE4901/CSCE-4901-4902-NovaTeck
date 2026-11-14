@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { responseError } from '../apiErrors';
 
-export default function ResumeSkills({ token, onProcessed, compact = false, profileUpload = false }) {
+export default function ResumeSkills({ token, onProcessed, compact = false, profileUpload = false, wireframe = false, onProfile, onSavedState, onUploadBusyChange }) {
   const uploadInput = useRef(null), previewDialog = useRef(null);
   const [preview, setPreview] = useState(null);
   useEffect(() => {
@@ -15,19 +15,22 @@ export default function ResumeSkills({ token, onProcessed, compact = false, prof
   const [file, setFile] = useState(null);
   const [saved, setSaved] = useState(null);
   const [loadError, setLoadError] = useState('');
+  const [savedLoading, setSavedLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [uploadState, setUploadState] = useState('idle');
   const [skills, setSkills] = useState([]);
   async function loadSaved() {
     const response = await fetch('/api/resume/saved', { headers: { Authorization: `Bearer ${token}` } });
     const result = await response.json();
     if (!response.ok) throw new Error(response.status === 404 ? 'Saved resumes are temporarily unavailable. Please try again.' : responseError(response.status, result.error));
-    setSaved(result); setSkills(result?.skills || []); setLoadError('');
+    setSaved(result); setSkills(result?.skills || []); setLoadError(''); onSavedState?.({ready:true,resume:result,error:''});
   }
   async function retrySaved() {
-    setMessage(''); setLoadError('');
+    setMessage(''); setLoadError(''); setSavedLoading(true);
     try { await loadSaved(); }
-    catch (error) { setLoadError(error.message); }
+    catch (error) { setLoadError(error.message); onSavedState?.({ready:true,resume:null,error:error.message}); }
+    finally { setSavedLoading(false); }
   }
   useEffect(() => { retrySaved(); }, [token]);
   async function previewSaved() {
@@ -37,49 +40,66 @@ export default function ResumeSkills({ token, onProcessed, compact = false, prof
       if (!response.ok) throw new Error('Could not open your saved resume. Please try again.');
       setPreview(isPdf ? { filename: saved.filename, url: URL.createObjectURL(await response.blob()) }
                           : { filename: saved.filename, text: (await response.json()).text });
-    } catch (error) { setMessage(error.message); }
+    } catch (error) { setMessage(error.message); setUploadState('error'); }
   }
   async function scan(uploadFile = file) {
     if (!uploadFile && !saved) return;
-    setBusy(true); setMessage('Scanning resume for skills…');
+    setBusy(true); setUploadState('uploading'); onUploadBusyChange?.(true); setMessage(profileUpload ? 'Saving your resume…' : 'Scanning resume for skills…');
     const form = new FormData(); if (uploadFile) form.append('resume', uploadFile);
     try {
       const response = await fetch(uploadFile ? '/api/resume/upload' : '/api/resume/saved/scan', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, ...(uploadFile ? { body: form } : {}) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Resume processing failed.');
-      await loadSaved(); setSkills(result.skills); setFile(null); setMessage(profileUpload ? 'Resume saved.' : result.message); onProcessed?.();
-    } catch (error) { setMessage(error.message); }
-    finally { setBusy(false); }
+      const replaced = Boolean(uploadFile && saved);
+      const saveMessage = replaced ? 'Resume replaced.' : 'Resume saved.';
+      await loadSaved();
+      setSkills(result.skills);
+      setFile(null);
+      setMessage(profileUpload ? saveMessage : [replaced && saveMessage, result.message].filter(Boolean).join(' '));
+      setUploadState('success');
+      await onProcessed?.(result);
+    } catch (error) { setMessage(error.message); setUploadState('error'); }
+    finally { setBusy(false); onUploadBusyChange?.(false); }
   }
   function selectResume(selected) {
     if (!selected || busy) return;
     if (!/\.(pdf|docx)$/i.test(selected.name) || selected.size > 5 * 1024 * 1024) {
-      setMessage('Choose a PDF or DOCX file up to 5 MB.'); return;
+      setMessage('Choose a PDF or DOCX file up to 5 MB.'); setUploadState('error'); return;
     }
     scan(selected);
   }
+  const chooseResume = () => uploadInput.current?.click();
+  const immediateUploadInput = <input ref={uploadInput} type="file" accept=".pdf,.docx" hidden disabled={busy} aria-label={saved ? 'Replace resume' : 'Upload resume'} onChange={event => {
+    const selected = event.target.files?.[0];
+    event.target.value = '';
+    selectResume(selected);
+  }} />;
   const previewModal = preview && createPortal(<dialog ref={previewDialog} className="nova-resume-preview" aria-labelledby="nova-preview-title" onCancel={() => setPreview(null)} onClick={event => { if (event.target === event.currentTarget) setPreview(null); }}>
     <header><div><h2 id="nova-preview-title">Resume Preview</h2><span>{preview.filename}</span></div><button type="button" aria-label="Close resume preview" onClick={() => setPreview(null)}>×</button></header>
     {preview.url ? <iframe title="Saved resume PDF" src={preview.url} /> : <div className="nova-resume-text"><p>Text preview · original formatting may differ</p><pre>{preview.text}</pre></div>}
   </dialog>, document.body);
-  if (profileUpload) return <div className="profile-resume-upload">{previewModal}
+  if (profileUpload) return <div className={`profile-resume-upload is-${uploadState}`} aria-busy={busy}>{previewModal}
     <div className="profile-resume-row">
-      <input ref={uploadInput} type="file" accept=".pdf,.docx" hidden disabled={busy} aria-label="Upload resume" onChange={event => { selectResume(event.target.files?.[0]); event.target.value = ''; }} />
-      <button type="button" className={`profile-resume-dropzone${dragging ? ' is-dragging' : ''}`} disabled={busy}
-        onClick={() => uploadInput.current?.click()}
+      {immediateUploadInput}
+      <button type="button" className={`profile-resume-dropzone${dragging ? ' is-dragging' : ''}`} disabled={busy} aria-describedby="profile-resume-limits profile-resume-privacy"
+        onClick={chooseResume}
         onDragOver={event => { event.preventDefault(); if (!busy) setDragging(true); }}
         onDragLeave={() => setDragging(false)}
-        onDrop={event => { event.preventDefault(); setDragging(false); if (event.dataTransfer.files.length > 1) { setMessage('Choose one resume at a time.'); return; } selectResume(event.dataTransfer.files[0]); }}>
-        <span>{busy ? 'Saving resume…' : 'Drag & drop or click to upload'}</span>
-        <small>Accepted formats: PDF or DOCX · Up to 5 MB</small>
+        onDrop={event => { event.preventDefault(); setDragging(false); if (busy) return; if (event.dataTransfer.files.length !== 1) { setMessage('Choose one resume at a time.'); setUploadState('error'); return; } selectResume(event.dataTransfer.files[0]); }}>
+        <span className="lp-profile-upload-icon" aria-hidden="true">{busy ? '…' : uploadState === 'success' ? '✓' : uploadState === 'error' ? '!' : '↑'}</span>
+        <strong>{busy ? 'Uploading your resume…' : dragging ? 'Drop your resume here' : saved ? 'Replace Resume' : 'Upload Resume'}</strong>
+        <span>{busy ? 'Your file is being saved securely.' : 'Choose a file or drag and drop it here'}</span>
+        <small id="profile-resume-limits">PDF or DOCX · Up to 5 MB · One file at a time</small>
       </button>
-      <div className="profile-current-resume"><span>Current Resume</span>
-        {saved ? <button type="button" className="text-button" onClick={previewSaved}>{saved.filename}</button> : <span className="wf-muted">No resume uploaded</span>}
+      <div className="profile-current-resume"><p className="lp-profile-kicker">CURRENT RESUME</p>
+        {savedLoading ? <p role="status">Loading saved resume…</p> : saved ? <><button type="button" className="text-button lp-profile-resume-name" onClick={previewSaved}>{saved.filename}</button><button type="button" className="wf-secondary" onClick={previewSaved} disabled={busy}>Preview</button></> : <p>No resume uploaded yet. Add a file to complete this part of your profile.</p>}
       </div>
     </div>
-    {loadError && <p role="alert">{loadError} <button type="button" className="wf-secondary" onClick={retrySaved}>Retry</button></p>}
-    {message && <p role="status">{message}</p>}
+    <p className="lp-profile-help" id="profile-resume-privacy">NovaTeck saves the uploaded file and uses it to detect skills. <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a></p>
+    {loadError && <p className="lp-profile-field-error" role="alert">{loadError} <button type="button" className="wf-secondary" onClick={retrySaved}>Retry</button></p>}
+    {message && <p className={`lp-profile-upload-feedback${uploadState === 'error' ? ' is-error' : ''}`} role={uploadState === 'error' ? 'alert' : 'status'}>{message}</p>}
   </div>;
+  if (wireframe) return <>{previewModal}{immediateUploadInput}<ResumeDetectionCard saved={saved} loading={savedLoading} error={loadError} busy={busy} skills={skills} message={message} onScan={() => scan()} onReplace={chooseResume} onProfile={onProfile} onPreview={previewSaved} onRetry={retrySaved} /></>;
   return <section className={`resume-panel nova-resume-scanner ${compact ? "resume-panel--compact" : ""}`} aria-labelledby="resume-heading">
     {previewModal}
     <header className="nova-scanner-header"><div><span className="nova-reward-label">BUILD YOUR SKILL STACK</span><h3 id="resume-heading">Resume Skill Detection</h3><p>Turn your resume into skills you can add to your profile.</p></div><span className="nova-scanner-format">PDF / DOCX</span></header>
@@ -98,19 +118,36 @@ export default function ResumeSkills({ token, onProcessed, compact = false, prof
   </section>;
 }
 
-export function FlaggedSkillGrid({ skills, selected = [], busy = false, leaving = [], jobCounts = {}, onToggle, onDismiss }) {
+export function ResumeDetectionCard({ saved, loading, error, busy, skills = [], message, onScan, onReplace, onProfile, onPreview, onRetry }) {
+  return <section className="sg-resume" aria-labelledby="sg-resume-heading" aria-busy={loading || busy}>
+    <div><p className="sg-kicker">02 / READ YOUR EXPERIENCE</p><h2 id="sg-resume-heading">Resume Skill Detection</h2><p>Discover skills in the resume already on file.</p></div>
+    {loading ? <div className="sg-skeleton" role="status">Loading saved resume…</div> : error ? <p role="alert">{error} <button type="button" className="wf-secondary" onClick={onRetry}>Retry saved resume</button></p> : saved ? <>
+      <div className="sg-resume-meta"><div><span>Saved file</span><button type="button" className="text-button" onClick={onPreview}>{saved.filename}</button></div><div><span>Skills detected</span><strong>{skills.length}</strong></div></div>
+      <div className="wf-inline">
+        <button type="button" className="wf-secondary" disabled={busy} onClick={onReplace}>Replace Resume</button>
+        <button type="button" className="primary-button" disabled={busy} onClick={onScan}>{busy ? 'Scanning…' : 'Scan Resume for Skills'}</button>
+      </div>
+    </> : <p className="sg-no-resume">No resume on file - upload one from your <button type="button" role="link" className="text-button" onClick={onProfile}>Profile</button></p>}
+    {message && <p role="status">{message}</p>}
+  </section>;
+}
+
+export function FlaggedSkillGrid({ skills, selected = [], busy = false, leaving = [], jobCounts = {}, onToggle, onDismiss, onAdd }) {
   return <div className="nova-flagged-grid">{skills.map(skill => {
     const name = skillDisplayName(skill.skill_name);
     const count = jobCounts[String(skill.unmatched_id)];
     return <div key={skill.unmatched_id} className={`pending-skill${selected.includes(skill.unmatched_id) ? ' is-selected' : ''}${leaving.includes(skill.unmatched_id) ? ' is-leaving' : ''}`}>
       <label className="nova-flagged-choice"><input type="checkbox" disabled={busy} checked={selected.includes(skill.unmatched_id)} onChange={() => onToggle(skill.unmatched_id)} /><span><strong>{name}</strong>{typeof count === 'number' && <small className="nova-skill-relevance">Appears in {count} active job{count === 1 ? '' : 's'} in this category</small>}</span></label>
+      {onAdd && <button type="button" className="wf-secondary sg-flag-add" disabled={busy} onClick={() => onAdd(skill)} aria-label={`Add to Profile: ${name}`}>Add to Profile</button>}
       <button type="button" className="text-button nova-flagged-dismiss" disabled={busy} onClick={() => onDismiss(skill)} aria-label={`Dismiss ${name} suggestion`} title="Dismiss this suggestion; your resume and profile stay unchanged">Dismiss</button>
     </div>;
   })}</div>;
 }
 
-export function PendingSkills({ skills = [], token, onAdded, discipline = '', request }) {
+export function PendingSkills({ skills = [], token, onAdded, discipline = '', request, noNewDetected = false, extrasTargetId }) {
   const [busy, setBusy] = useState(false), [failure, setFailure] = useState('');
+  const [extrasTarget, setExtrasTarget] = useState(null);
+  useEffect(() => { if (extrasTargetId) setExtrasTarget(document.getElementById(extrasTargetId)); }, [extrasTargetId]);
   const [selected, setSelected] = useState([]), [hidden, setHidden] = useState([]), [leaving, setLeaving] = useState([]);
   const [message, setMessage] = useState(''), [dismissed, setDismissed] = useState(null);
   const [dismissedIds, setDismissedIds] = useState([]), [addedCount, setAddedCount] = useState(0);
@@ -183,18 +220,20 @@ export function PendingSkills({ skills = [], token, onAdded, discipline = '', re
     } catch (error) { setFailure(error.message); }
     finally { setBusy(false); }
   }
-  return <section className="resume-panel nova-flagged-panel">
-    <header className="nova-flagged-header"><div className="nova-flagged-title"><span className="nova-flagged-icon" aria-hidden="true">⚑</span><div><span className="nova-reward-label">DISCOVER YOUR SKILL STACK</span><h3>Flagged Skills</h3></div></div><span className="nova-flagged-count">{visible.length ? `${visible.length} to review` : 'All caught up'}</span></header>
-    {visible.length > 0 && <p>Found in your resume, not in your profile. Select skills you want to add.</p>}
-    {failure && <p role="alert">{failure}</p>}
+  const extras = <div className="sg-review-extras">
+    <h3>Review actions</h3>
     {message && <div className="nova-skill-feedback" role="status">{message} {dismissed && <button type="button" className="text-button" disabled={busy} onClick={undo}>Undo</button>}</div>}
-    {!visible.length && <div className="nova-flagged-empty"><span className="nova-empty-check" aria-hidden="true">✓</span><div><strong>{dismissedIds.length || !addedCount ? 'All suggestions reviewed' : 'All listed resume skills are in your profile'}</strong><p>Scan an updated resume whenever you have more skills to add.</p></div></div>}
-    <FlaggedSkillGrid skills={visible} selected={selected} busy={busy} leaving={leaving} jobCounts={impact?.skill_job_counts} onToggle={id => setSelected(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id])} onDismiss={dismiss} />
-    {visible.length > 0 && <footer className="nova-flagged-bulk">
-      <div><button type="button" className={chosen.length ? "primary-button" : "wf-secondary"} disabled={busy || !chosen.length} onClick={() => add(chosen)}>{busy ? 'Working…' : `Add selected (${chosen.length})`}</button><button type="button" className="text-button" disabled={busy} onClick={() => add(visible)}>Add all ({visible.length})</button></div>
-      <div aria-live="polite">{estimating ? <small>Calculating profile match impact…</small> : impact?.job_count > 0 && <><p>Adding {chosen.length ? 'these selected' : 'all'} skills would change your <strong>Market skill match from {impact.current_market_match}% to {impact.projected_market_match}%</strong>.</p>{impact.has_saved_resume && <small>For job-specific resume matches, upload an updated resume that includes your new skills.</small>}</>}</div>
-    </footer>}
-  </section>;
+    {visible.length > 0 && <footer className="nova-flagged-bulk"><div><button type="button" className={chosen.length ? 'primary-button' : 'wf-secondary'} disabled={busy || !chosen.length} onClick={() => add(chosen)}>{busy ? 'Working…' : `Add selected (${chosen.length})`}</button><button type="button" className="text-button" disabled={busy} onClick={() => add(visible)}>Add all ({visible.length})</button></div>
+    <div aria-live="polite">{estimating ? <p>Calculating market match impact…</p> : impact?.job_count > 0 && <p>Market-wide preview: {impact.current_market_match}% → {impact.projected_market_match}%. This preview is separate from your selected-job match.</p>}</div></footer>}
+  </div>;
+  return <><section className="resume-panel nova-flagged-panel" aria-labelledby="sg-flagged-heading">
+    <header className="nova-flagged-header"><div><p className="sg-kicker">05 / REVIEW NEW SKILLS</p><h2 id="sg-flagged-heading">Flagged Skills: Not In System</h2></div><span>{visible.length} to review</span></header>
+    {failure && <p role="alert">{failure}</p>}
+    {noNewDetected && <p role="status">No new skills detected</p>}
+    {!visible.length && !noNewDetected && <p>{addedCount && !dismissedIds.length ? 'All listed resume skills are in your profile.' : 'No skills waiting for review. Scan your saved resume to check for new skills.'}</p>}
+    <FlaggedSkillGrid skills={visible} selected={selected} busy={busy} leaving={leaving} jobCounts={impact?.skill_job_counts} onToggle={id => setSelected(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id])} onAdd={skill => add([skill])} onDismiss={dismiss} />
+  </section>{extrasTargetId ? extrasTarget && createPortal(extras, extrasTarget) : extras}</>;
+
 }
 
 export function AdminReview({ token, onForbidden, embedded = false }) {

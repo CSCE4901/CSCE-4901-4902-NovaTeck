@@ -12,6 +12,7 @@ import jwt
 import bcrypt
 import datetime
 from functools import wraps
+from urllib.parse import urlencode
 from flask import Flask, request, jsonify, send_file
 from werkzeug.utils import secure_filename
 from flask_cors import CORS
@@ -102,18 +103,17 @@ def allowed_resume(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_RESUME_EXTENSIONS
 
 
-def deliver_password_reset(email, token):
-    """Send the reset URL using deployment-provided SMTP credentials."""
+def deliver_auth_email(email, subject, content):
+    """Send an authentication email using deployment-provided SMTP settings."""
     host = os.environ.get("SMTP_HOST")
     sender = os.environ.get("SMTP_FROM")
     if not host or not sender:
-        app.logger.warning("Password reset requested but SMTP is not configured")
+        app.logger.warning("Authentication email requested but SMTP is not configured")
         return False
-    public_url = os.environ.get("APP_PUBLIC_URL", "http://127.0.0.1:3000").rstrip("/")
     message = EmailMessage()
-    message["Subject"] = "NovaTeck password reset"
+    message["Subject"] = subject
     message["From"], message["To"] = sender, email
-    message.set_content(f"Reset your NovaTeck password within 30 minutes: {public_url}/?resetToken={token}")
+    message.set_content(content)
     try:
         with smtplib.SMTP(host, int(os.environ.get("SMTP_PORT", "587")), timeout=15) as server:
             if os.environ.get("SMTP_STARTTLS", "true").lower() == "true":
@@ -124,11 +124,43 @@ def deliver_password_reset(email, token):
             server.send_message(message)
         return True
     except (OSError, smtplib.SMTPException) as exc:
-        app.logger.error("Password reset email failed: %s", exc)
+        app.logger.error("Authentication email failed: %s", type(exc).__name__)
         return False
 
 
+def public_app_url():
+    return os.environ.get("APP_PUBLIC_URL", "http://127.0.0.1:3000").rstrip("/")
+
+
+def deliver_password_reset(email, token):
+    return deliver_auth_email(email, "NovaTeck password reset",
+                              f"Reset your NovaTeck password within 30 minutes: {public_app_url()}/?resetToken={token}")
+
+
+def registration_signing_key():
+    if not JWT_SECRET:
+        raise RuntimeError("JWT_SECRET is required for registration verification")
+    return f"novateck-registration:{JWT_SECRET}"
+
+
 # AUTH
+
+@app.route("/api/auth/register/request", methods=["POST"])
+def request_registration_email():
+    address = (request.get_json() or {}).get("email")
+    email = address.strip().lower() if isinstance(address, str) else ""
+    if len(email) > 254 or not EMAIL_PATTERN.fullmatch(email):
+        return jsonify({"error": "Enter a valid email address"}), 400
+    token = jwt.encode({
+        "email": email,
+        "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=30),
+    }, registration_signing_key(), algorithm="HS256")
+    fragment = urlencode({"registrationToken": token, "email": email})
+    if not deliver_auth_email(email, "Verify your NovaTeck email",
+                              f"Finish creating your NovaTeck account within 30 minutes: {public_app_url()}/#{fragment}"):
+        return jsonify({"error": "Could not send the verification email. Check the address or try again later."}), 503
+    return jsonify({"message": "Check your inbox for a link to finish creating your account."})
+
 
 @app.route("/api/auth/register", methods=["POST"])
 def register():
@@ -144,6 +176,17 @@ def register():
         return jsonify({"error": "Enter a valid email address"}), 400
     if error := password_error(password):
         return jsonify({"error": error}), 400
+
+    token = data.get("verification_token")
+    if not isinstance(token, str):
+        return jsonify({"error": "Verify your email before creating an account"}), 400
+    try:
+        verified = jwt.decode(token, registration_signing_key(), algorithms=["HS256"],
+                              options={"require": ["exp", "email"]})
+    except jwt.InvalidTokenError:
+        return jsonify({"error": "Your verification link is invalid or expired. Request a new link."}), 400
+    if verified["email"] != email:
+        return jsonify({"error": "Use the email address you verified"}), 400
 
     pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
@@ -253,19 +296,20 @@ def get_jobs():
     limit = max(1, min(limit or 200, 500))
     offset = max(0, offset or 0)
 
-    jobs = db.get_jobs(
-        skill=skill,
-        location=location,
-        company_id=company_id,
-        experience=experience,
-        discipline=discipline,
-        limit=None if request.args.get("sort") == "match" else limit,
-        offset=offset,
-        q=request.args.get("q"),
-        work_type=request.args.get("work_type"),
-        exclude_applications_user_id=request.user_id,
-    )
-    jobs = db.add_resume_matches(request.user_id, jobs)
+    with db.jobs_read_session():
+        jobs = db.get_jobs(
+            skill=skill,
+            location=location,
+            company_id=company_id,
+            experience=experience,
+            discipline=discipline,
+            limit=None if request.args.get("sort") == "match" else limit,
+            offset=offset,
+            q=request.args.get("q"),
+            work_type=request.args.get("work_type"),
+            exclude_applications_user_id=request.user_id,
+        )
+        jobs = db.add_resume_matches(request.user_id, jobs)
     if request.args.get('sort') == 'match':
         jobs.sort(key=lambda job: job.get('resume_match_pct') if isinstance(job.get('resume_match_pct'), (int, float)) else -1, reverse=True)
         jobs = jobs[offset:offset + limit]

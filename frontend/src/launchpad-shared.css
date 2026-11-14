@@ -1,0 +1,151 @@
+/* Deliberate migration boundary: legacy rules use !important throughout.
+   Only shared primitives are bridged here; page-specific layouts stay intact. */
+@import './design-tokens.css';
+html:root body, html:root .app-shell {
+  background: var(--lp-bg) !important;
+  color: var(--lp-text) !important;
+  font-family: var(--lp-font-body);
+  line-height: var(--lp-leading-body);
+  -webkit-font-smoothing: antialiased;
+}
+.app-shell :is(button, input, select, textarea) { font-family: var(--lp-font-body); }
+.app-shell :is(h1,h2,h3,h4) { font-family: var(--lp-font-display) !important; }
+.app-shell :is(button,a,input,select,textarea,summary,[tabindex]):focus-visible {
+  outline: 3px solid var(--lp-focus) !important;
+  outline-offset: 4px !important;
+  box-shadow: 0 0 0 2px var(--lp-bg) !important;
+}
+html .app-shell .nova-nav {
+  max-width: 1440px;
+  margin-inline: auto;
+  padding: var(--lp-space-4) var(--lp-space-8) !important;
+  gap: var(--lp-space-4) !important;
+  min-height: 96px !important;
+  flex-wrap: nowrap;
+}
+html .app-shell .nova-nav .nova-brand { margin-right: var(--lp-space-4) !important; }
+html .app-shell .nova-nav .nova-nav-links { gap: var(--lp-space-2) !important; flex-wrap: nowrap; }
+html .app-shell .nova-nav :is(.nova-nav-tab,.nova-nav-exit,.nova-theme-toggle,.nova-mobile-menu) {
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: var(--lp-muted) !important;
+  box-shadow: none !important;
+  font-size: 14px !important;
+  font-weight: 550 !important;
+  min-height: 42px;
+  transition: background var(--lp-duration-fast) var(--lp-ease), color var(--lp-duration-fast) var(--lp-ease), transform var(--lp-duration-fast) var(--lp-ease) !important;
+}
+html .app-shell .nova-nav :is(.nova-nav-tab,.nova-nav-exit) { padding: 9px 14px !important; border-radius: var(--lp-radius-pill) !important; }
+html .app-shell .nova-nav :is(.nova-nav-tab,.nova-nav-exit,.nova-theme-toggle,.nova-mobile-menu):hover {
+  background: var(--lp-surface-soft) !important;
+  color: var(--lp-text) !important;
+  transform: translateY(-1px) !important;
+}
+html .app-shell .nova-nav .nova-nav-links > .nova-nav-tab[aria-current='page'] {
+  background: var(--lp-text) !important;
+  color: var(--lp-bg) !important;
+  border-color: var(--lp-text) !important;
+  box-shadow: var(--lp-shadow-sm) !important;
+}
+html .app-shell .nova-nav .nova-nav-links > .nova-nav-tab[aria-current='page'] svg { color: var(--lp-bg) !important; stroke: currentColor !important; }
+html .app-shell .nova-nav-chat > .nova-nav-tab { color: var(--lp-primary) !important; border-color: var(--lp-border) !important; background: var(--lp-surface) !important; }
+html .app-shell .nova-nav-chat > .nova-nav-tab::before, html .app-shell .nova-nav-chat > .nova-nav-tab::after { content: none !important; }
+html .app-shell .nova-nav-account { padding-left: var(--lp-space-2); gap: var(--lp-space-2) !important; }
+html .app-shell .nova-nav :is(.nova-nav-tab,.nova-nav-exit,.nova-theme-toggle,.nova-mobile-menu):active { transform: translateY(1px) !important; }
+html .app-shell :is(.primary-button,.nova-apply-button) {
+  background: var(--lp-primary) !important;
+  color: var(--lp-on-primary) !important;
+  border: 1px solid var(--lp-primary) !important;
+  border-radius: var(--lp-radius-md) !important;
+  font-size: var(--lp-text-sm) !important;
+  font-weight: 600 !important;
+  box-shadow: var(--lp-shadow-sm) !important;
+  transition: transform var(--lp-duration-fast) var(--lp-ease), background var(--lp-duration-fast) var(--lp-ease) !important;
+}
+html .app-shell :is(.primary-button,.nova-apply-button):hover:not(:disabled) { background: var(--lp-primary-hover) !important; box-shadow: var(--lp-shadow-md) !important; transform: translateY(-1px) !important; filter: none; }
+html .app-shell :is(.wf-secondary,.nova-bookmark-button,.nova-filter-pill) {
+  background: var(--lp-surface) !important;
+  color: var(--lp-text) !important;
+  border: 1px solid var(--lp-input-border) !important;
+  border-radius: var(--lp-radius-md) !important;
+  box-shadow: none !important;
+  transition: background var(--lp-duration-fast) var(--lp-ease), transform var(--lp-duration-fast) var(--lp-ease) !important;
+}
+html .app-shell :is(.wf-secondary,.nova-bookmark-button,.nova-filter-pill):hover:not(:disabled) { background: var(--lp-surface-blue) !important; transform: translateY(-1px); }
+html .app-shell .nova-filter-pill:has(input:checked) { background: var(--lp-surface-blue) !important; color: var(--lp-primary) !important; border-color: var(--lp-primary) !important; }
+html .app-shell .nova-bookmark-button[aria-pressed='true'] { background: var(--lp-surface-blue) !important; color: var(--lp-primary) !important; }
+html .app-shell :is(.primary-button,.nova-apply-button,.wf-secondary,.nova-bookmark-button):active:not(:disabled) { transform: translateY(1px) !important; }
+html .app-shell :is(.wf-card,.resume-panel,.wf-job-row,.nova-modern-job,.wf-two-columns > section,.wf-page > section:not(.resume-panel)) {
+  background: var(--lp-surface) !important;
+  border-color: var(--lp-border) !important;
+  border-radius: var(--lp-radius-lg) !important;
+  box-shadow: var(--lp-shadow-sm) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+html .app-shell .nova-modern-job:hover {
+  border-color: var(--lp-input-border) !important;
+  box-shadow: var(--lp-shadow-md) !important;
+  transform: translateY(-2px) !important;
+}
+html .app-shell .nova-modern-job:active { transform: translateY(0) !important; }
+html .app-shell :is(input:not([type='checkbox']):not([type='radio']):not([type='file']),textarea,select) {
+  background-color: var(--lp-surface) !important;
+  color: var(--lp-text) !important;
+  border-color: var(--lp-input-border) !important;
+  border-radius: var(--lp-radius-sm) !important;
+  transition: border-color var(--lp-duration-fast) var(--lp-ease) !important;
+}
+html .app-shell :is(input,textarea)::placeholder { color: var(--lp-muted) !important; opacity: 1; }
+html .app-shell :is(input,textarea,select):hover:not(:disabled) { border-color: var(--lp-primary) !important; }
+html .app-shell :is(input,textarea,select)[aria-invalid='true'] { border-color: var(--lp-danger) !important; }
+html .app-shell :is(.wf-tag,.nova-job-skill-chips > span,.nova-filter-count) {
+  background: var(--lp-surface-soft) !important;
+  color: var(--lp-muted) !important;
+  border-color: var(--lp-border) !important;
+  border-radius: var(--lp-radius-pill) !important;
+  box-shadow: none !important;
+}
+/* Preserve status meaning when tokenizing shared chips. */
+html .app-shell .nova-job-skill-chips > span.is-missing { color: var(--lp-danger) !important; }
+html .app-shell .nova-job-skill-chips > span.is-partial { color: var(--lp-accent) !important; background: var(--lp-accent-soft) !important; }
+html .app-shell :is(.wf-stats strong,.nova-filter-count,.nova-match-percent) { font-family: var(--lp-font-mono) !important; font-variant-numeric: tabular-nums; }
+html .app-shell .nova-eyebrow { font-family: var(--lp-font-mono); background: var(--lp-surface-blue) !important; color: var(--lp-primary) !important; border-color: var(--lp-border) !important; box-shadow: none !important; }
+html .app-shell .nova-footer { color: var(--lp-muted); border-color: var(--lp-border); }
+@media (min-width: 769px) and (max-width: 1100px) {
+  html .app-shell .nova-nav { padding-inline: var(--lp-space-4) !important; gap: var(--lp-space-2) !important; }
+  html .app-shell .nova-nav .nova-brand { margin-right: 0 !important; padding-inline: 0; }
+  html .app-shell .nova-nav :is(.nova-nav-tab,.nova-nav-exit) { padding-inline: 9px !important; font-size: 14px !important; gap: 5px !important; }
+  html .app-shell .nova-nav .nova-nav-links { gap: var(--lp-space-1) !important; }
+}
+@media (max-width: 768px) {
+  html .app-shell .nova-nav { flex-wrap: wrap; padding: var(--lp-space-3) var(--lp-space-4) !important; min-height: 88px !important; }
+  html .app-shell .nova-nav .nova-nav-links, html .app-shell .nova-nav .nova-nav-account { display: none !important; }
+  html .app-shell .nova-nav.is-mobile-open .nova-nav-links { display: grid !important; grid-template-columns: repeat(2,minmax(0,1fr)); }
+  html .app-shell .nova-nav.is-mobile-open .nova-nav-account { display: flex !important; border-color: var(--lp-border); }
+}
+@media (prefers-reduced-motion: reduce) {
+  html .app-shell *, html .app-shell *::before, html .app-shell *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+/* One page grid for the five Launchpad screens; other screens retain their layout. */
+.app-shell.lp-aligned-shell { --lp-page-gutter: clamp(20px, 3vw, 40px); }
+html .app-shell.lp-aligned-shell :is(.nova-nav,.nova-page-container) {
+  width: min(var(--lp-content-width), calc(100% - 2 * var(--lp-page-gutter)));
+  max-width: var(--lp-content-width);
+  margin-inline: auto;
+  box-sizing: border-box;
+}
+html .app-shell.lp-aligned-shell .nova-nav { padding: var(--lp-space-3) 0 var(--lp-space-2) !important; min-height: 88px !important; }
+html .app-shell.lp-aligned-shell .nova-nav .nova-brand { padding: 0; }
+html .app-shell.lp-aligned-shell .nova-page-container { padding: var(--lp-space-2) 0 var(--lp-space-6); }
+html .app-shell.lp-aligned-shell .nova-page-container > main { width: 100%; max-width: none; margin-inline: 0; }
+html .app-shell.lp-aligned-shell .lp-dashboard { padding-top: var(--lp-space-2); }
+html .app-shell .lp-dashboard > .nova-page-header { padding-top: 0; }
+html .app-shell .lp-dashboard > .nova-page-header h1 { font-size: clamp(26px, 2.5vw, 30px) !important; line-height: 1.2; letter-spacing: -.035em; }
+html .app-shell .lp-dashboard > .wf-stats--three { align-items: stretch; grid-auto-rows: 1fr; }
+html .app-shell .lp-dashboard .nova-stat-link { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; min-height: 184px; height: 100%; margin: 0; box-sizing: border-box; transform: none !important; }
+html .app-shell .lp-dashboard .nova-stat-link > strong { font-size: 14px; color: var(--lp-muted); }
+html .app-shell .lp-dashboard .nova-stat-link > p { font-family: var(--lp-font-mono); color: var(--lp-text); }
+html .app-shell .lp-dashboard .nova-stat-link > small { margin-top: auto; padding-top: var(--lp-space-3); font-size: 14px; color: var(--lp-muted); }
+html .app-shell .lp-dashboard .nova-stat-link > progress { flex-shrink: 0; accent-color: var(--lp-primary); }

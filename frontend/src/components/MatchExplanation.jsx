@@ -1,18 +1,17 @@
 import { useState } from 'react';
+import { profileMatch } from './profileMatch';
 import { skillDisplayName } from './skillDisplay';
 
-export default function MatchExplanation({ job, maxChips = 4 }) {
+export default function MatchExplanation({ job, maxChips = 4, profileSkills }) {
   const [expandedGroups, setExpandedGroups] = useState({});
-  const outcomes = Array.isArray(job.resume_requirement_groups) ? job.resume_requirement_groups : [];
+  const match = profileMatch(job, profileSkills);
+  const outcomes = match.groups;
   const groupName = group => group.skills.join(' / ');
-  const missing = outcomes.length ? outcomes.filter(group => group.status === 'missing').map(groupName) : Array.isArray(job.resume_missing_skills) ? job.resume_missing_skills : [];
-  const missingNames = new Set(missing.map(skill => skill.toLowerCase()));
-  const partial = outcomes.length ? outcomes.filter(group => group.status === 'partial').map(groupName) : Array.isArray(job.resume_partial_skills) ? job.resume_partial_skills : [];
-  const partialNames = new Set(partial.map(skill => skill.toLowerCase()));
-  const required = outcomes.length ? outcomes.map(groupName) : (job.skill_summary || '').split(',').map(skill => skill.trim()).filter(Boolean);
-  const skills = [...new Map([...required, ...(!outcomes.length && Array.isArray(job.resume_matched_skills) ? job.resume_matched_skills : []), ...partial, ...missing].map(skill => [skill.toLowerCase(), skill])).values()];
+  const missingNames = new Set(outcomes.filter(group => group.status === 'missing').map(groupName));
+  const partialNames = new Set(outcomes.filter(group => group.status === 'partial').map(groupName));
+  const skills = outcomes.map(groupName);
   const groups = [
-    { label: job.resume_match_status === 'ready' ? 'Matched' : 'Required skills', skills: skills.filter(skill => !missingNames.has(skill.toLowerCase()) && !partialNames.has(skill.toLowerCase())), missing: false },
+    { label: match.state === 'ready' ? 'Matched' : 'Required skills', skills: skills.filter(skill => !missingNames.has(skill.toLowerCase()) && !partialNames.has(skill.toLowerCase())), missing: false },
     { label: 'Partial match', skills: skills.filter(skill => partialNames.has(skill.toLowerCase())), partial: true },
     { label: 'Missing', skills: skills.filter(skill => missingNames.has(skill.toLowerCase())), missing: true },
   ];

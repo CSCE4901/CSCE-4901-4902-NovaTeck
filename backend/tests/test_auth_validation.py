@@ -7,6 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app import app
+from urllib.parse import parse_qs, urlsplit
 
 
 class AuthValidationTests(unittest.TestCase):
@@ -52,10 +53,34 @@ class AuthValidationTests(unittest.TestCase):
         self.assertEqual(response.json['error'], 'Service temporarily unavailable. Please try again.')
         self.assertNotIn('private', response.get_data(as_text=True))
 
+    def verification_token(self, email):
+        with patch("app.deliver_auth_email", return_value=True) as deliver:
+            response = self.client.post("/api/auth/register/request", json={"email": email})
+        self.assertEqual(response.status_code, 200)
+        link = deliver.call_args.args[2].split()[-1]
+        return parse_qs(urlsplit(link).fragment)["registrationToken"][0]
+
+    def test_registration_requires_proof_for_the_same_address(self):
+        email = "student@example.test"
+        data = {"name": "Student", "email": email, "password": "ExamplePass12"}
+        with patch("db.insert_user", return_value=7) as insert:
+            self.assertEqual(self.client.post("/api/auth/register", json=data).status_code, 400)
+            token = self.verification_token(email)
+            self.assertEqual(self.client.post("/api/auth/register", json={
+                **data, "email": "other@example.test", "verification_token": token,
+            }).status_code, 400)
+            insert.assert_not_called()
+            result = self.client.post("/api/auth/register", json={**data, "verification_token": token})
+            self.assertEqual(result.status_code, 201)
+            insert.assert_called_once()
+
     def test_registration_database_outage_is_not_reported_as_duplicate_email(self):
+        email = "student@example.test"
+        token = self.verification_token(email)
         with patch('db.get_connection', side_effect=Error('database offline')):
             response = self.client.post('/api/auth/register', json={
-                'name': 'Student', 'email': 'student@example.test', 'password': 'ExamplePass12'
+                'name': 'Student', 'email': email, 'password': 'ExamplePass12',
+                'verification_token': token,
             })
         self.assertEqual(response.status_code, 503)
 

@@ -1,0 +1,88 @@
+/* Launchpad foundations. Semantic tokens keep light/dark components in sync. */
+:root {
+  color-scheme: light;
+  --lp-navy: #172554;
+  --lp-blue: #2457d6;
+  --lp-flame: #b8461b;
+  --lp-bg: #f8f7f3;
+  --lp-surface: #ffffff;
+  --lp-surface-soft: #f0f2f5;
+  --lp-surface-blue: #eaf0fc;
+  --lp-text: #172554;
+  --lp-muted: #566174;
+  --lp-on-primary: #ffffff;
+  --lp-primary: #2457d6;
+  --lp-primary-hover: #1c43a9;
+  --lp-accent: #b8461b;
+  --lp-accent-soft: #fcece1;
+  --lp-border: #d8dde5;
+  --lp-input-border: #7b879b;
+  --lp-focus: #2457d6;
+  --lp-success: #166340;
+  --lp-danger: #b32628;
+  --lp-font-display: 'Bricolage Grotesque Variable', 'Arial', sans-serif;
+  --lp-font-body: 'Geist Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --lp-font-mono: 'Geist Mono Variable', ui-monospace, 'SFMono-Regular', Consolas, monospace;
+  --lp-text-xs: .6875rem;
+  --lp-text-sm: .8125rem;
+  --lp-text-base: 1rem;
+  --lp-text-lg: 1.125rem;
+  --lp-text-xl: 1.375rem;
+  --lp-text-2xl: clamp(1.75rem, 3vw, 2.5rem);
+  --lp-text-display: clamp(2.75rem, 5.1vw, 4.5rem);
+  --lp-leading-tight: 1.04;
+  --lp-leading-heading: 1.16;
+  --lp-leading-body: 1.7;
+  --lp-track-display: -.055em;
+  --lp-space-1: .25rem;
+  --lp-space-2: .5rem;
+  --lp-space-3: .75rem;
+  --lp-space-4: 1rem;
+  --lp-space-5: 1.25rem;
+  --lp-space-6: 1.5rem;
+  --lp-space-8: 2rem;
+  --lp-space-10: 2.5rem;
+  --lp-space-12: 3rem;
+  --lp-space-16: 4rem;
+  --lp-space-20: 5rem;
+  --lp-radius-sm: .5rem;
+  --lp-radius-md: .875rem;
+  --lp-radius-lg: 1.5rem;
+  --lp-radius-xl: 2rem;
+  --lp-radius-pill: 999px;
+  --lp-shadow-sm: 0 2px 5px rgb(23 37 84 / .04);
+  --lp-shadow-md: 0 12px 32px -18px rgb(23 37 84 / .22);
+  --lp-shadow-lg: 0 28px 64px -30px rgb(23 37 84 / .25);
+  --lp-duration-fast: 140ms;
+  --lp-duration-base: 220ms;
+  --lp-duration-enter: 650ms;
+  --lp-duration-count: 950ms;
+  --lp-ease: cubic-bezier(.2, .7, .2, 1);
+  --lp-ease-enter: cubic-bezier(.16, 1, .3, 1);
+  --lp-content-width: 1160px;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --lp-bg: #101722;
+  --lp-surface: #182231;
+  --lp-surface-soft: #202c3d;
+  --lp-surface-blue: #203352;
+  --lp-text: #eef2fa;
+  --lp-muted: #b0bbcc;
+  --lp-primary: #a8c4ff;
+  --lp-primary-hover: #c6d8ff;
+  --lp-on-primary: #142342;
+  --lp-accent: #ffb18a;
+  --lp-accent-soft: #3d2a24;
+  --lp-border: #354257;
+  --lp-input-border: #6c7e98;
+  --lp-focus: #a8c4ff;
+  --lp-success: #8cdeb4;
+  --lp-danger: #ffadae;
+  --lp-shadow-sm: 0 2px 5px rgb(0 0 0 / .1);
+  --lp-shadow-md: 0 12px 32px -18px rgb(0 0 0 / .35);
+  --lp-shadow-lg: 0 28px 64px -30px rgb(0 0 0 / .5);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root { --lp-duration-fast: 0ms; --lp-duration-base: 0ms; --lp-duration-enter: 0ms; --lp-duration-count: 0ms; }
+}

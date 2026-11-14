@@ -2,6 +2,8 @@
 import io
 import sys
 import uuid
+from unittest.mock import patch
+from urllib.parse import parse_qs, urlsplit
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -31,7 +33,17 @@ def main():
         migrate.main(); migrate.main()
         api.JWT_SECRET = 'integration-test-only-' + uuid.uuid4().hex
         client = api.app.test_client()
-        response = client.post('/api/auth/register', json={'name': 'Test Student', 'email': 'student@example.test', 'password': 'ExamplePass12'})
+        def register(name, email):
+            with patch.object(api, 'deliver_auth_email', return_value=True) as deliver:
+                verification = client.post('/api/auth/register/request', json={'email': email})
+            assert verification.status_code == 200, verification.json
+            link = deliver.call_args.args[2].split()[-1]
+            token = parse_qs(urlsplit(link).fragment)['registrationToken'][0]
+            return client.post('/api/auth/register', json={
+                'name': name, 'email': email, 'password': 'ExamplePass12', 'verification_token': token,
+            })
+
+        response = register('Test Student', 'student@example.test')
         assert response.status_code == 201, response.json
         user = response.json['user_id']; headers = {'Authorization': 'Bearer ' + response.json['token']}
         for skill in ['python', 'react', 'aws', 'mysql']:
@@ -123,7 +135,7 @@ def main():
         assert stored.status_code == 200 and stored.data == pdf_bytes()
         assert stored.headers['Cache-Control'] == 'no-store'
         assert client.get('/api/resume/saved/file').status_code == 401
-        other = client.post('/api/auth/register', json={'name': 'Other', 'email': 'other@example.test', 'password': 'ExamplePass12'}).json
+        other = register('Other', 'other@example.test').json
         other_headers = {'Authorization': 'Bearer ' + other['token']}
         assert client.get('/api/resume/saved', headers=other_headers).json is None
         assert client.get('/api/resume/saved/file', headers=other_headers).status_code == 404
