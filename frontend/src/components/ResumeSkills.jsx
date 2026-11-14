@@ -55,7 +55,7 @@ export default function ResumeSkills({ token, onProcessed, compact = false, prof
       await loadSaved();
       setSkills(result.skills);
       setFile(null);
-      setMessage(profileUpload ? saveMessage : [replaced && saveMessage, result.message].filter(Boolean).join(' '));
+      setMessage(result.message || saveMessage);
       setUploadState('success');
       await onProcessed?.(result);
     } catch (error) { setMessage(error.message); setUploadState('error'); }

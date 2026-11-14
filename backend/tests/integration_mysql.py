@@ -78,6 +78,11 @@ def main():
         assert db.get_market_trends()
         assert client.get('/api/students/'+str(user)+'/recommendations', headers=headers).status_code == 200
         assert client.get('/api/market-trends', headers=headers).status_code == 200
+        first = client.post('/api/resume/upload', headers=headers, data={
+            'resume': (io.BytesIO(pdf_bytes('Python')), 'first.pdf'),
+        })
+        assert first.status_code == 200 and first.json['first_upload'], first.json
+        assert first.json['added_skills'] == [] and first.json['flagged_count'] == 0
         for expected in [4, 0]:
             response = client.post('/api/resume/upload', headers=headers, data={'resume': (io.BytesIO(pdf_bytes()), 'resume.pdf')})
             assert response.status_code == 200, response.json
@@ -214,6 +219,23 @@ def main():
                 cur.execute(f'SELECT COUNT(*) FROM {table} WHERE job_id IN (%s, %s)', (stale_id, first_id))
                 assert cur.fetchone()[0] == 0
         assert db.get_job_by_id(impact_id)
+        newcomer = register('New Resume', 'new-resume@example.test').json
+        newcomer_id = newcomer['user_id']
+        newcomer_headers = {'Authorization': 'Bearer ' + newcomer['token']}
+        db.set_user_skills_from_list(newcomer_id, ['sql', 'Custom Skill'])
+        first = client.post('/api/resume/upload', headers=newcomer_headers, data={
+            'resume': (io.BytesIO(pdf_bytes('Python React')), 'first.pdf'),
+        })
+        assert first.status_code == 200 and first.json['first_upload'], first.json
+        assert first.json['added_skills'] == ['python', 'react'] and first.json['flagged_count'] == 0
+        replacement = client.post('/api/resume/upload', headers=newcomer_headers, data={
+            'resume': (io.BytesIO(pdf_bytes('Python Docker')), 'replacement.pdf'),
+        })
+        assert replacement.status_code == 200 and not replacement.json['first_upload'], replacement.json
+        assert replacement.json['added_skills'] == [] and replacement.json['flagged_count'] == 1
+        assert {row['skill_name'] for row in db.get_flagged_skills(newcomer_id)} == {'docker'}
+        assert {skill.lower() for skill in db.get_user_skills(newcomer_id)} == {'python', 'react', 'sql'}
+        assert 'Custom Skill' in db.get_user_by_id(newcomer_id)['skills']
         print('PASS: fresh schema, repeated migrations, registration, real PDF upload, duplicate prevention, owner/admin access, approve/reject, profile persistence, application statuses, admin overview, unchanged skill-gap results')
     finally:
         cursor.execute(f'DROP DATABASE IF EXISTS `{name}`')

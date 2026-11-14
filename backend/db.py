@@ -936,8 +936,6 @@ def get_student_skill_gap_summary(user_id, discipline=None, profile_override=Non
 
 def flag_resume_skills(user_id, skill_names):
     """Flag resume skills."""
-    from resume_processing import normalize_skill
-    newly_flagged = 0
     with get_connection() as conn:
         try:
             cur = conn.cursor()
@@ -945,21 +943,28 @@ def flag_resume_skills(user_id, skill_names):
             cur.execute("SELECT user_id FROM Users WHERE user_id = %s FOR UPDATE", (user_id,))
             if not cur.fetchone():
                 raise ValueError("User not found")
-            for name in sorted({normalize_skill(s) for s in skill_names}):
-                cur.execute("""SELECT s.skill_id FROM User_Skills us
-                    JOIN Skills s ON s.skill_id = us.skill_id
-                    WHERE us.user_id = %s AND LOWER(TRIM(s.skill_name)) = %s""", (user_id, name))
-                if cur.fetchone():
-                    continue
-                cur.execute("SELECT unmatched_id FROM Unmatched_Skills WHERE user_id = %s AND skill_name = %s AND status = 'pending'", (user_id, name))
-                if cur.fetchone():
-                    continue
-                cur.execute("INSERT INTO Unmatched_Skills (user_id, skill_name) VALUES (%s, %s)", (user_id, name))
-                newly_flagged += 1
+            newly_flagged = _flag_resume_skills(cur, user_id, skill_names)
             conn.commit()
         except Exception:
             conn.rollback()
             raise
+    return newly_flagged
+
+
+def _flag_resume_skills(cur, user_id, skill_names):
+    from resume_processing import normalize_skill
+    newly_flagged = 0
+    for name in sorted({normalize_skill(s) for s in skill_names}):
+        cur.execute("""SELECT s.skill_id FROM User_Skills us
+            JOIN Skills s ON s.skill_id = us.skill_id
+            WHERE us.user_id = %s AND LOWER(TRIM(s.skill_name)) = %s""", (user_id, name))
+        if cur.fetchone():
+            continue
+        cur.execute("SELECT unmatched_id FROM Unmatched_Skills WHERE user_id = %s AND skill_name = %s AND status = 'pending'", (user_id, name))
+        if cur.fetchone():
+            continue
+        cur.execute("INSERT INTO Unmatched_Skills (user_id, skill_name) VALUES (%s, %s)", (user_id, name))
+        newly_flagged += 1
     return newly_flagged
 
 
@@ -1134,13 +1139,44 @@ def add_resume_skill_to_profile(user_id, flag_id):
 
 def save_resume(user_id, filename, content, skills):
     import json
+    from resume_processing import normalize_skill
+    from nlp_tagger import KNOWN_SKILLS
+
+    detected = sorted({normalize_skill(skill) for skill in skills} - {''})
     with get_connection() as conn:
-        cur = conn.cursor()
-        cur.execute('''INSERT INTO Saved_Resumes (user_id, filename, content, detected_skills)
-            VALUES (%s, %s, %s, %s) ON DUPLICATE KEY UPDATE filename = VALUES(filename),
-            content = VALUES(content), detected_skills = VALUES(detected_skills), updated_at = CURRENT_TIMESTAMP''',
-            (user_id, filename, content, json.dumps(skills)))
-        conn.commit()
+        try:
+            cur = conn.cursor()
+            cur.execute('SELECT skills FROM Users WHERE user_id=%s FOR UPDATE', (user_id,))
+            user = cur.fetchone()
+            if user is None:
+                raise ValueError("User not found")
+            cur.execute('SELECT user_id FROM Saved_Resumes WHERE user_id=%s FOR UPDATE', (user_id,))
+            first_upload = cur.fetchone() is None
+            added = []
+            profile = [name.strip() for name in (user[0] or '').split(',') if name.strip()]
+            owned = {normalize_skill(name) for name in profile}
+            if first_upload:
+                catalog = set(KNOWN_SKILLS)
+                for name in detected:
+                    if name not in catalog:
+                        continue
+                    cur.execute("INSERT INTO Skills (skill_name, skill_type) VALUES (%s, 'technical') ON DUPLICATE KEY UPDATE skill_name=skill_name", (name,))
+                    cur.execute("SELECT skill_id FROM Skills WHERE LOWER(TRIM(skill_name))=%s", (name,))
+                    cur.execute("INSERT IGNORE INTO User_Skills (user_id, skill_id) VALUES (%s,%s)", (user_id, cur.fetchone()[0]))
+                    if name not in owned:
+                        added.append(name)
+                if added:
+                    cur.execute("UPDATE Users SET skills=%s WHERE user_id=%s", (','.join(profile + added), user_id))
+            flagged = _flag_resume_skills(cur, user_id, [name for name in detected if name not in owned])
+            cur.execute('''INSERT INTO Saved_Resumes (user_id, filename, content, detected_skills)
+                VALUES (%s, %s, %s, %s) ON DUPLICATE KEY UPDATE filename = VALUES(filename),
+                content = VALUES(content), detected_skills = VALUES(detected_skills), updated_at = CURRENT_TIMESTAMP''',
+                (user_id, filename, content, json.dumps(skills)))
+            conn.commit()
+            return {'first_upload': first_upload, 'added_skills': added, 'flagged_count': flagged}
+        except Exception:
+            conn.rollback()
+            raise
 
 
 def get_saved_resume(user_id, include_content=False):

@@ -27,8 +27,13 @@ export default function SkillGapPage({ auth, request, setPage }) {
     setFlags(summary.unverified_skills || []); setFlagsReady(true);
   }
   async function afterScan(result) {
-    setNoNewDetected(result.flagged_count === 0);
-    // Detection alone never changes accepted profile skills or the displayed comparison.
+    setNoNewDetected(result.flagged_count === 0 && !result.added_skills?.length);
+    if (result.added_skills?.length) {
+      const user = await request(userPath, {}, auth.token);
+      window.dispatchEvent(new CustomEvent('novateck-profile-skills-saved', {
+        detail: { userId: auth.user_id, skills: user.skills },
+      }));
+    }
     await refreshFlags();
   }
   async function afterReview({ scrollToMatch = true } = {}) {

@@ -442,10 +442,13 @@ def upload_resume(user_id=None):
         skills = process_resume(resume.filename, content)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-    db.save_resume(request.user_id, secure_filename(resume.filename)[-255:] or "resume.pdf", content, skills)
-    count = db.flag_resume_skills(request.user_id, skills)
-    return jsonify({"message": f"Resume processed. {len(skills)} skills identified. {count} new skill(s) found missing from your profile. Choose Add to Profile below to include them.",
-                    "skills": skills, "flagged_count": count}), 200
+    result = db.save_resume(request.user_id, secure_filename(resume.filename)[-255:] or "resume.pdf", content, skills)
+    added = len(result['added_skills'])
+    flagged = result['flagged_count']
+    message = f"Resume saved. {added} skills added to your profile." if added else "Resume saved."
+    if flagged:
+        message += f" {flagged} skills flagged for review in Skill Gap."
+    return jsonify({"message": message, "skills": skills, **result}), 200
 
 
 @app.route("/api/resume/saved", methods=["GET"])

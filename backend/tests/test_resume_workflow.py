@@ -58,12 +58,11 @@ class APITests(unittest.TestCase):
         self.headers = {'Authorization': 'Bearer '+api.create_token(7)}
 
     def test_upload_and_exact_message(self):
-        with patch.object(db, 'save_resume') as save, patch.object(db, 'flag_resume_skills', return_value=2) as flag:
+        with patch.object(db, 'save_resume', return_value={'first_upload': False, 'added_skills': [], 'flagged_count': 2}) as save:
             response = self.client.post('/api/resume/upload', headers=self.headers, data={'resume': (io.BytesIO(pdf_bytes()), 'cv.pdf')})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json['message'], 'Resume processed. 5 skills identified. 2 new skill(s) found missing from your profile. Choose Add to Profile below to include them.')
+        self.assertEqual(response.json['message'], 'Resume saved. 2 skills flagged for review in Skill Gap.')
         save.assert_called_once()
-        flag.assert_called_once_with(7, ['aws', 'mysql', 'python', 'react', 'rust'])
 
     def test_owner_and_admin_authorization(self):
         self.assertEqual(self.client.post('/api/resume/upload').status_code, 401)
