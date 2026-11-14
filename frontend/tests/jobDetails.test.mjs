@@ -36,6 +36,10 @@ test('detail uses grouped card requirements, consistent names, notices, and comp
     const job = { job_id: 293, title: 'Senior Software Engineer', company_name: 'Company', location: 'Boston; Charlotte; Chicago; Dallas; New York; San Francisco', work_arrangement: 'Hybrid', source_url: 'https://example.com/job', resume_match_pct: 67, resume_matched_count: 2, resume_required_count: 3, resume_match_source: 'resume', resume_requirement_groups: [{skills:['python'],status:'matched'}, {skills:['react','typescript'],status:'matched'}, {skills:['observability'],status:'missing'}], skills: [{skill_name:'github',requirement_type:'preferred'}], description_sections: [{title:'What You’ll Do',html:'<p>Build applications.</p>'}, {title:'Company Overview',html:'<p>Company description.</p>'}, {title:'THIS POSTING IS FOR A CURRENT VACANCY',html:'<p>Vacancy notice.</p>'}] };
     const html = renderToStaticMarkup(createElement(JobDetailContent, {job, profileSkills:['python','react'], gap:{match_pct:50}, goJob(){}, setPage(){}}));
     for (const text of ['67% skill match', '2 of 3 skills', 'React / TypeScript', 'Observability', 'GitHub', 'Dallas +5 more', 'Hybrid', 'Responsibilities', 'About the company']) assert.ok(html.includes(text), text);
+    const matchedSkills = html.match(/<div class="nova-matched-skills">.*?<\/div>/s)?.[0];
+    assert.match(matchedSkills, /<li class="wf-tag">Python<\/li>/);
+    assert.match(matchedSkills, /<li class="wf-tag">React<\/li>/);
+    assert.doesNotMatch(matchedSkills, /TypeScript|Observability/);
     assert.ok(!html.includes('50%'));
     assert.ok(!html.match(/<dl>[\s\S]*?<\/dl>/)[0].includes('Not provided'));
     assert.ok(!html.includes('Work type not provided'));

@@ -12,7 +12,11 @@ export function profileMatch(job, profileSkills) {
   const neutral = { percent: null, groups: required.map(skills => ({ skills })), missing: [], matched: 0, partial: 0 };
   if (!Array.isArray(profileSkills)) return { ...neutral, state: required.length < 3 ? 'unavailable' : 'loading' };
   const owned = new Set(profileSkills.map(normalize).filter(Boolean));
-  const groups = required.map(skills => ({ skills, status: skills.some(skill => owned.has(skill)) ? 'matched' : skills.includes('sql server') && owned.has('sql') ? 'partial' : 'missing' }));
+  const groups = required.map(skills => {
+    const matchedSkills = skills.filter(skill => owned.has(skill));
+    const status = matchedSkills.length ? 'matched' : skills.includes('sql server') && owned.has('sql') ? 'partial' : 'missing';
+    return { skills, status, matchedSkills };
+  });
   const matched = groups.filter(group => group.status === 'matched').length;
   const partial = groups.filter(group => group.status === 'partial').length;
   const state = required.length < 3 ? 'unavailable' : !owned.size ? 'empty' : 'ready';

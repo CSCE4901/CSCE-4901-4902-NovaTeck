@@ -32,6 +32,10 @@ html .app-shell .nova-job-detail .nova-employer-group > summary h2 { margin:0; f
 details[open] > summary > .nova-detail-chevron { transform:rotate(180deg); }
 html .app-shell .nova-job-detail .nova-match-info { display:flex; flex-wrap:wrap; gap:4px var(--lp-space-3); margin-top:var(--lp-space-3); color:var(--lp-muted); font-size:14px; line-height:1.6; }
 .nova-match-info details { max-width:70ch; }
+.nova-matched-skills { margin-top:var(--lp-space-3); }
+.nova-matched-skills h3 { font-size:1rem; margin:0 0 8px; }
+.nova-matched-skills ul { list-style:none; padding:0; margin:0; }
+.nova-matched-skills p { margin:8px 0 0; }
 .nova-match-info summary { display:inline-flex; align-items:center; gap:var(--lp-space-2); list-style:none; cursor:pointer; color:var(--lp-primary); min-height:32px; }
 .nova-match-info > span { padding-top:5px; }
 html .app-shell .nova-job-detail .nova-match-info p { color:var(--lp-muted); font-size:14px; margin:var(--lp-space-2) 0; }
