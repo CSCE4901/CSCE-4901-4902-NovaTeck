@@ -372,7 +372,7 @@ def analyze_job_skills(description, description_html=None):
             title = re.sub(r'\s+', ' ', re.sub(r'[^a-z0-9 ]', '', title)).strip()
             if title in _REQUIRED_HEADINGS or title.startswith('minimum requirements'):
                 kind = 'required'
-            elif title in _PREFERRED_HEADINGS or title.startswith('an ideal candidate'):
+            elif title in _PREFERRED_HEADINGS or title.startswith(('an ideal candidate', 'bonus points for ')):
                 kind = 'preferred'
             else:
                 kind = None

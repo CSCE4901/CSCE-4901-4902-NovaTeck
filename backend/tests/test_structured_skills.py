@@ -12,7 +12,7 @@ class StructuredSkillTests(unittest.TestCase):
         <li>Familiarity with frontend frameworks (React, Next.js, etc.)</li>
         <li>Rapid prototyping tools (Replit, v0.dev, Bolt, etc.)</li>
         <li>Strong communication and collaboration skills</li></ul>
-        <h2>Preferred Skills</h2>
+        <h2>Bonus Points for Experience With</h2>
         <ul><li>Test automation frameworks (e.g. Cypress, Playwright, Selenium)</li>
         <li>Infrastructure as code (e.g. Terraform, Pulumi) or DevOps tooling</li></ul>"""
         result = analyze_job_skills('', html)
