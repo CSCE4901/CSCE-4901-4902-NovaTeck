@@ -19,6 +19,17 @@ const API = "/api";
 const AuthContext = createContext(null);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_PATTERN = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+const SESSION_IDLE_MINUTES = 5;
+const SESSION_IDLE_MS = SESSION_IDLE_MINUTES * 60 * 1000;
+const SESSION_ACTIVITY_KEY = "nt_last_activity";
+
+function clearSession() {
+  for (const storage of [localStorage, sessionStorage]) {
+    storage.removeItem("nt_token");
+    storage.removeItem("nt_user");
+  }
+  sessionStorage.removeItem(SESSION_ACTIVITY_KEY);
+}
 
 // helpers
 function useAuth() { return useContext(AuthContext); }
@@ -48,11 +59,18 @@ async function apiFetch(path, options = {}, token = null) {
 // App shell
 export default function App() {
   const [auth, setAuth] = useState(() => {
-    const storage = localStorage.getItem("nt_token") ? localStorage : sessionStorage;
-    const t = storage.getItem("nt_token");
-    const u = storage.getItem("nt_user");
-    try { return t && u ? { token: t, ...JSON.parse(u) } : null; } catch { return null; }
+    localStorage.removeItem("nt_token");
+    localStorage.removeItem("nt_user");
+    const token = sessionStorage.getItem("nt_token");
+    const user = sessionStorage.getItem("nt_user");
+    const elapsed = Date.now() - Number(sessionStorage.getItem(SESSION_ACTIVITY_KEY));
+    if (token && user && elapsed >= 0 && elapsed < SESSION_IDLE_MS) {
+      try { return { ...JSON.parse(user), token }; } catch { /* Clear invalid stored session below. */ }
+    }
+    clearSession();
+    return null;
   });
+  const [sessionMessage, setSessionMessage] = useState("");
   const [homeFocus,setHomeFocus]=useState(null);
   const [profileFocus, setProfileFocus] = useState(null);
   const [registrationLink] = useState(() => {
@@ -83,18 +101,57 @@ export default function App() {
     apiFetch(`/students/${auth.user_id}`, {}, token).then(user => {
       if (!active) return;
       const profile = { user_id: user.user_id, name: user.name, role: user.role };
-      for (const storage of [localStorage, sessionStorage]) {
-        if (storage.getItem("nt_token") === token) storage.setItem("nt_user", JSON.stringify(profile));
-      }
+      if (sessionStorage.getItem("nt_token") === token) sessionStorage.setItem("nt_user", JSON.stringify(profile));
       setAuth(current => current?.token === token ? { ...current, ...profile, ...(revision === profileSkillsRevision.current ? { profileSkills: (user.skills || '').split(',').map(skill => skill.trim()).filter(Boolean), profileSkillsError: false } : {}) } : current);
     }).catch(error => { if (active && error.status === 401) logout(); else if (active) setAuth(current => current?.token === token ? { ...current, profileSkillsError: true } : current); });
     return () => { active = false; };
   }, [auth?.token]);
 
   useEffect(() => {
-    window.addEventListener("novateck-session-expired", logout);
-    return () => window.removeEventListener("novateck-session-expired", logout);
+    const expire = () => logout("Your session expired. Please sign in again.");
+    window.addEventListener("novateck-session-expired", expire);
+    return () => window.removeEventListener("novateck-session-expired", expire);
   }, []);
+
+  useEffect(() => {
+    if (!auth?.token) return;
+    let timer;
+    let lastActivity = Number(sessionStorage.getItem(SESSION_ACTIVITY_KEY));
+    const activityEvents = ["pointerdown", "keydown", "input", "scroll"];
+
+    function checkSession() {
+      window.clearTimeout(timer);
+      const remaining = SESSION_IDLE_MS - (Date.now() - lastActivity);
+      if (remaining <= 0 || remaining > SESSION_IDLE_MS) {
+        logout(`You were signed out after ${SESSION_IDLE_MINUTES} minutes of inactivity.`);
+        return false;
+      }
+      timer = window.setTimeout(checkSession, remaining);
+      return true;
+    }
+
+    function recordActivity(event) {
+      if (!event.isTrusted || document.hidden || !checkSession()) return;
+      const now = Date.now();
+      if (now - lastActivity < 1000) return;
+      lastActivity = now;
+      sessionStorage.setItem(SESSION_ACTIVITY_KEY, String(now));
+      checkSession();
+    }
+
+    checkSession();
+    for (const event of activityEvents) document.addEventListener(event, recordActivity, { capture: true, passive: true });
+    document.addEventListener("visibilitychange", checkSession);
+    window.addEventListener("pageshow", checkSession);
+    window.addEventListener("focus", checkSession);
+    return () => {
+      window.clearTimeout(timer);
+      for (const event of activityEvents) document.removeEventListener(event, recordActivity, true);
+      document.removeEventListener("visibilitychange", checkSession);
+      window.removeEventListener("pageshow", checkSession);
+      window.removeEventListener("focus", checkSession);
+    };
+  }, [auth?.token]);
 
   useEffect(() => {
     const updateSkills = event => {
@@ -105,17 +162,21 @@ export default function App() {
     return () => window.removeEventListener('novateck-profile-skills-saved', updateSkills);
   }, []);
 
-  function login(token, user, remember = false) {
-    const storage = remember ? localStorage : sessionStorage;
-    for (const store of [localStorage, sessionStorage]) { store.removeItem("nt_token"); store.removeItem("nt_user"); }
-    storage.setItem("nt_token", token);
-    storage.setItem("nt_user", JSON.stringify(user));
+  function login(token, user) {
+    clearSession();
+    sessionStorage.setItem("nt_token", token);
+    sessionStorage.setItem("nt_user", JSON.stringify(user));
+    sessionStorage.setItem(SESSION_ACTIVITY_KEY, String(Date.now()));
+    setSessionMessage("");
     setAuth({ token, ...user });
-    setPage(user.role === "admin" ? "admin" : "jobs");
+    setPage("home");
   }
 
-  function logout() {
-    for (const store of [localStorage, sessionStorage]) { store.removeItem("nt_token"); store.removeItem("nt_user"); }
+  function logout(message = "") {
+    clearSession();
+    setSessionMessage(message);
+    setSelectedJobId(null);
+    window.history.replaceState(null, "", "/");
     setAuth(null);
     setPage("login");
   }
@@ -123,8 +184,7 @@ export default function App() {
   function updateDisplayName(name) {
     setAuth(current => {
       const updated = { ...current, name };
-      const storage = localStorage.getItem("nt_token") ? localStorage : sessionStorage;
-      storage.setItem("nt_user", JSON.stringify({ user_id: updated.user_id, name }));
+      sessionStorage.setItem("nt_user", JSON.stringify({ user_id: updated.user_id, name, role: updated.role }));
       return updated;
     });
   }
@@ -136,13 +196,13 @@ export default function App() {
 
   useEffect(() => {
     const restorePage = event => {
-      if (!event.state?.novaPage) return;
+      if (!auth?.token || !event.state?.novaPage) return;
       setSelectedJobId(event.state.novaJobId || null);
       setPage(event.state.novaPage);
     };
     window.addEventListener('popstate', restorePage);
     return () => window.removeEventListener('popstate', restorePage);
-  }, []);
+  }, [auth?.token]);
   function goJob(id) {
     setJobReturnPage(page);
     window.history.replaceState({ ...window.history.state, novaPage: page, novaJobId: selectedJobId }, '', window.location.href);
@@ -157,9 +217,9 @@ export default function App() {
   return (
     <AuthContext.Provider value={auth}>
       <div className={`app-shell${["home", "jobs", "detail", "dashboard", "profile", "skillgap"].includes(page) ? " lp-aligned-shell" : ""}`}>
-        {!["login", "register"].includes(page) && <Navbar page={page} setPage={setPage} logout={logout} auth={auth} theme={theme} deviceTheme={deviceTheme} setTheme={setTheme} />}
+        {!["login", "register"].includes(page) && <Navbar page={page} setPage={setPage} logout={() => logout()} auth={auth} theme={theme} deviceTheme={deviceTheme} setTheme={setTheme} />}
         <div className="nova-page-container">
-          {page === "login"     && <LoginPage onLogin={login} setPage={setPage} />}
+          {page === "login"     && <LoginPage onLogin={login} setPage={setPage} sessionMessage={sessionMessage} />}
           {page === "register"  && <RegisterPage onLogin={login} setPage={setPage} registrationLink={registrationLink} />}
           {page === "forgot"    && <ForgotPasswordPage setPage={setPage} />}
           {page === "reset"     && <ResetPasswordPage setPage={setPage} />}
@@ -245,8 +305,8 @@ export function Navbar({ page, setPage, logout, auth, theme, deviceTheme, setThe
 }
 
 // LoginPage
-function LoginPage({ onLogin, setPage }) {
-  const [form, setForm] = useState({ email: "", password: "", remember: false });
+function LoginPage({ onLogin, setPage, sessionMessage }) {
+  const [form, setForm] = useState({ email: "", password: "" });
   const [err, setErr]   = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -259,7 +319,7 @@ function LoginPage({ onLogin, setPage }) {
     setLoading(true);
     try {
       const data = await apiFetch("/auth/login", { method: "POST", body: JSON.stringify(form) });
-      onLogin(data.token, { user_id: data.user_id, name: data.name, role: data.role }, form.remember);
+      onLogin(data.token, { user_id: data.user_id, name: data.name, role: data.role });
     } catch (e) { setErr(e.message); }
     setLoading(false);
   }
@@ -267,7 +327,7 @@ function LoginPage({ onLogin, setPage }) {
   return (
     <AuthLayout title="Sign In" variant="login" setPage={setPage}>
       <form className="auth-form" onSubmit={event => { event.preventDefault(); handleSubmit(); }}>
-        {err && <div className="auth-form-message"><Alert msg={err} /></div>}
+        {(err || sessionMessage) && <div className="auth-form-message"><Alert msg={err || sessionMessage} /></div>}
         <AuthField id="login-email" label="Email address" type="email" autoComplete="username" value={form.email} onChange={email => setForm(current => ({ ...current, email }))} />
         <AuthField id="login-password" label="Password" type="password" autoComplete="current-password" value={form.password} onChange={password => setForm(current => ({ ...current, password }))} />
         <div className="auth-actions"><button className="primary-button auth-submit" type="submit" disabled={loading}>{loading ? "Signing in…" : "Sign In"}</button></div>
