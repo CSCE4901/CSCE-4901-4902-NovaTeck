@@ -5,7 +5,9 @@ import re
 import hashlib
 import logging
 from pathlib import Path
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
+from contextvars import ContextVar
+from functools import lru_cache
 import mysql.connector
 from mysql.connector import Error
 from job_metadata import with_salary
@@ -61,8 +63,36 @@ if os.environ.get("DB_SSL_CA", "").strip():
                      ssl_verify_identity=True, ssl_disabled=False)
 
 
+_jobs_read_connection = ContextVar('jobs_read_connection', default=None)
+
+
+@contextmanager
+def jobs_read_session():
+    """Use one database connection for the reads in a Jobs request."""
+    with ExitStack() as stack:
+        @lru_cache(maxsize=1)
+        def acquire():
+            return stack.enter_context(_open_connection())
+
+        token = _jobs_read_connection.set(acquire)
+        try:
+            yield
+        finally:
+            _jobs_read_connection.reset(token)
+
+
 @contextmanager
 def get_connection():
+    acquire = _jobs_read_connection.get()
+    if acquire is not None:
+        yield acquire()
+        return
+    with _open_connection() as conn:
+        yield conn
+
+
+@contextmanager
+def _open_connection():
     conn = None
     try:
         conn = mysql.connector.connect(**DB_CONFIG)
@@ -1098,6 +1128,17 @@ def get_saved_resume(user_id, include_content=False):
         return row
 
 
+@lru_cache(maxsize=256)
+def _posting_requirement_groups(description_html):
+    """Reuse the extracted alternatives until the employer description changes."""
+    from nlp_tagger import analyze_job_skills
+
+    analysis = analyze_job_skills('', description_html)
+    if analysis['source'] != 'qualification_html':
+        return None
+    return tuple(frozenset(group) for group in analysis['required_groups'])
+
+
 def add_resume_matches(user_id, jobs, profile_override=None):
     """Compare required skills with saved resume skills, falling back to the profile."""
     if not jobs:
@@ -1130,13 +1171,13 @@ def add_resume_matches(user_id, jobs, profile_override=None):
         needed = required[job['job_id']]
         groups = [{skill} for skill in sorted(needed)]
         extraction_source = 'text_fallback'
-        if html_by_job.get(job['job_id']):
-            from nlp_tagger import analyze_job_skills
-            analysis = analyze_job_skills('', html_by_job[job['job_id']])
-            if analysis['source'] == 'qualification_html':
-                extraction_source = analysis['source']
+        html = html_by_job.get(job['job_id'])
+        if html:
+            extracted_groups = _posting_requirement_groups(html)
+            if extracted_groups is not None:
+                extraction_source = 'qualification_html'
                 # Do not include new HTML tags until a job has been retagged.
-                candidates = [set(group) & needed for group in analysis['required_groups']]
+                candidates = [group & needed for group in extracted_groups]
                 groups = [group for group in candidates if group]
                 covered = set().union(*groups) if groups else set()
                 groups += [{skill} for skill in sorted(needed - covered)]

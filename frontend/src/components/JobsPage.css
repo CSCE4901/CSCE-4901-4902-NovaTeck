@@ -1,0 +1,150 @@
+/* Launchpad Jobs is scoped so Dashboard, Profile, Skill Gap and Nova retain their layouts. */
+html .app-shell .lp-jobs { padding: var(--lp-space-2) 0 var(--lp-space-8); color: var(--lp-text); }
+html .app-shell .lp-jobs > .nova-eyebrow { display: block !important; width: fit-content; padding: 0 !important; background: none !important; border: 0 !important; font: 500 14px/1.5 var(--lp-font-mono); letter-spacing: .08em; color: var(--lp-accent) !important; margin-bottom: var(--lp-space-4) !important; }
+html .app-shell .lp-jobs > h1 { font-size: clamp(32px,4vw,48px) !important; font-weight: 600 !important; line-height: var(--lp-leading-heading); letter-spacing: -.05em !important; color: var(--lp-text) !important; }
+html .app-shell .lp-jobs .nova-jobs-subtitle { color: var(--lp-muted) !important; font-size: 16px !important; margin: var(--lp-space-3) 0 var(--lp-space-8) !important; line-height: var(--lp-leading-body); }
+html .app-shell .lp-jobs .nova-job-search { display: flex; align-items: center; gap: var(--lp-space-3); padding: var(--lp-space-2) !important; background: var(--lp-surface) !important; border: 1px solid var(--lp-input-border) !important; border-radius: var(--lp-radius-md) !important; box-shadow: var(--lp-shadow-sm) !important; backdrop-filter: none !important; transform: none !important; }
+html .app-shell .lp-jobs .nova-job-search:focus-within { border-color: var(--lp-focus) !important; box-shadow: 0 0 0 2px var(--lp-focus) !important; }
+html .app-shell .lp-jobs .nova-job-search-input { padding-left: var(--lp-space-3); gap: var(--lp-space-3); }
+html .app-shell .lp-jobs .nova-job-search-input > svg { color: var(--lp-primary); }
+html .app-shell .lp-jobs #job-search { min-width: 0; font-size: 16px; padding: var(--lp-space-3) 0; color: var(--lp-text) !important; background: transparent !important; border: 0 !important; }
+html .app-shell .lp-jobs .nova-job-search > button { min-height: 48px; padding-inline: var(--lp-space-5) !important; display: inline-flex; gap: var(--lp-space-4); align-items: center; white-space: nowrap; }
+html .app-shell .lp-jobs .nova-filter-toolbar { gap: var(--lp-space-4); margin: var(--lp-space-4) 0; flex-wrap: wrap; }
+html .app-shell .lp-jobs .nova-filter-toolbar > button { font-size: 14px !important; }
+html .app-shell .lp-jobs .nova-filter-toolbar > .text-button { color: var(--lp-primary) !important; min-height: 44px; }
+html .app-shell .lp-jobs .nova-filter-toolbar > span { color: var(--lp-muted) !important; font-size: 14px; }
+.lp-active-filters { display: flex; flex-wrap: wrap; gap: var(--lp-space-2); margin-bottom: var(--lp-space-5); }
+.lp-active-filters > button { display: inline-flex; align-items: center; gap: var(--lp-space-3); max-width: 100%; min-height: 36px; padding: 6px 14px; color: var(--lp-primary); background: var(--lp-surface-blue); border: 1px solid var(--lp-input-border); border-radius: var(--lp-radius-pill); font-size: 14px; text-align: left; overflow-wrap: anywhere; }
+.lp-active-filters > button:hover { border-color: var(--lp-primary); }
+.lp-active-filters > button > span { font-size: 20px; }
+html .app-shell .lp-jobs #job-filters { margin: var(--lp-space-4) 0 var(--lp-space-8); padding: var(--lp-space-6); border: 1px solid var(--lp-border) !important; background: var(--lp-surface) !important; box-shadow: var(--lp-shadow-sm) !important; }
+html .app-shell .lp-jobs #job-filters[hidden] { display: none !important; }
+html .app-shell .lp-jobs .nova-filter-heading { border-color: var(--lp-border); gap: var(--lp-space-4); }
+html .app-shell .lp-jobs .nova-filter-title h2 { font-size: 22px; color: var(--lp-text) !important; }
+html .app-shell .lp-jobs .nova-filter-title p, html .app-shell .lp-jobs .nova-filter-footer > span { font-size: 14px; color: var(--lp-muted) !important; }
+html .app-shell .lp-jobs .nova-filter-icon { background: var(--lp-surface-blue); color: var(--lp-primary); }
+html .app-shell .lp-jobs .wf-field > span:first-child { font-size: 14px; font-weight: 550; color: var(--lp-text) !important; }
+html .app-shell .lp-jobs .nova-skill-select summary { background: var(--lp-surface) !important; color: var(--lp-text) !important; border: 1px solid var(--lp-input-border) !important; border-radius: var(--lp-radius-sm); min-height: 44px; font-size: 14px; }
+html .app-shell .lp-jobs .nova-skill-options { color: var(--lp-text); background: var(--lp-surface) !important; border-color: var(--lp-input-border); max-height: 260px; overflow: auto; }
+html .app-shell .lp-jobs .nova-skill-options label:hover { background: var(--lp-surface-blue); }
+html .app-shell .lp-jobs .nova-skill-options button { color: var(--lp-primary); min-height: 36px; }
+html .app-shell .lp-jobs .nova-filter-pill[aria-pressed='true'] { background: var(--lp-surface-blue) !important; color: var(--lp-primary) !important; border-color: var(--lp-primary) !important; }
+html .app-shell .lp-jobs .nova-filter-count { font: 400 14px/1.5 var(--lp-font-mono); color: var(--lp-muted); background: var(--lp-surface-soft); }
+html .app-shell .lp-jobs .nova-filter-footer { border-color: var(--lp-border); flex-wrap: wrap; gap: var(--lp-space-4); }
+html .app-shell .lp-jobs .nova-filter-footer > .nova-filter-success { color: var(--lp-success) !important; }
+html .app-shell .lp-jobs .nova-results-heading { align-items: flex-end; gap: var(--lp-space-4); margin: var(--lp-space-8) 0 var(--lp-space-5); }
+html .app-shell .lp-jobs .nova-results-title h2 { font-size: 24px !important; font-weight: 550; color: var(--lp-text) !important; }
+html .app-shell .lp-jobs .nova-results-title p { color: var(--lp-muted) !important; font: 400 14px/1.7 var(--lp-font-mono); }
+html .app-shell .lp-jobs .nova-results-heading label { color: var(--lp-muted); font-size: 14px; }
+html .app-shell .lp-jobs .nova-results-heading select { font-size: 14px; max-width: 100%; }
+.lp-job-action-message { color: var(--lp-danger); padding: var(--lp-space-4); border: 1px solid var(--lp-danger); border-radius: var(--lp-radius-md); font-size: 14px; }
+.lp-jobs-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: var(--lp-space-5); }
+.lp-job-card { display: grid; grid-template-columns: minmax(0,1fr) 142px; min-width: 0; padding: var(--lp-space-6); border: 1px solid var(--lp-border); border-radius: var(--lp-radius-lg); background: var(--lp-surface); color: var(--lp-text); box-shadow: var(--lp-shadow-sm); cursor: pointer; transition: transform var(--lp-duration-base) var(--lp-ease), box-shadow var(--lp-duration-base) var(--lp-ease), border-color var(--lp-duration-base) var(--lp-ease); }
+.lp-job-card:hover { transform: translateY(-3px); box-shadow: var(--lp-shadow-md); border-color: var(--lp-input-border); }
+.lp-job-card:active { transform: translateY(0); }
+.lp-job-card:focus-visible { outline: 3px solid var(--lp-focus); outline-offset: 4px; }
+.lp-job-main { display: flex; flex-direction: column; min-width: 0; padding-right: var(--lp-space-5); }
+.lp-job-heading { display: flex; align-items: flex-start; gap: var(--lp-space-3); }
+.lp-job-heading > div { min-width: 0; }
+html .app-shell .lp-job-card .company-logo { width: 42px; height: 42px; flex: 0 0 42px; border-radius: var(--lp-radius-sm); background: #fff !important; border-color: var(--lp-border); box-shadow: none !important; }
+html .app-shell .lp-job-card .company-logo img { width: 30px; height: 30px; filter: none; }
+html .app-shell .lp-job-card .company-logo-initials { font: 550 14px/1 var(--lp-font-body); background: #eaf0fc; color: #172554; }
+.lp-job-company { font-size: 14px; line-height: 1.5; color: var(--lp-muted); margin: 0 0 var(--lp-space-2); overflow-wrap: anywhere; }
+html .app-shell .lp-job-card h3 { margin: 0; font-size: 20px !important; line-height: 1.25; letter-spacing: -.035em; font-weight: 600; color: var(--lp-text) !important; }
+.lp-job-heading h3 button { padding: 0; border: 0; background: none; color: inherit; text-align: left; font: inherit; overflow-wrap: anywhere; }
+.lp-job-heading h3 button:hover { color: var(--lp-primary); }
+.lp-job-location { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lp-space-2); margin: var(--lp-space-4) 0 var(--lp-space-5); font-size: 14px; line-height: 1.6; color: var(--lp-muted); overflow-wrap: anywhere; }
+html .app-shell .lp-job-location .nova-location-toggle > button { color: var(--lp-primary); font-size: 14px; }
+.lp-job-tag { display: inline-flex; padding: 3px 8px; border: 1px solid var(--lp-border); border-radius: var(--lp-radius-pill); font: 400 14px/1.5 var(--lp-font-mono); background: var(--lp-surface-soft); color: var(--lp-muted); }
+.lp-job-compensation { display: flex; flex-direction: column; gap: var(--lp-space-2); margin-bottom: var(--lp-space-5); }
+.lp-job-small-label { font: 400 14px/1.5 var(--lp-font-mono); letter-spacing: .08em; color: var(--lp-muted); }
+.lp-job-compensation strong { font: 450 14px/1.7 var(--lp-font-mono); color: var(--lp-text); overflow-wrap: anywhere; }
+.lp-job-footer { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--lp-space-3); margin-top: auto; padding-top: var(--lp-space-4); border-top: 1px solid var(--lp-border); }
+.lp-job-recency { display: flex; flex-direction: column; gap: var(--lp-space-1); color: var(--lp-muted); font-size: 14px; line-height: 1.6; }
+.lp-job-recency > span[role='status'] { color: var(--lp-success); }
+html .app-shell .lp-job-card .nova-posted-date,
+html .app-shell .lp-job-card .nova-job-freshness { color: var(--lp-muted); font-size: 14px; margin: 0; }
+html .app-shell .lp-job-card .nova-job-unavailable { color: var(--lp-danger); }
+.lp-job-apply { display: inline-flex; align-items: center; gap: var(--lp-space-4); padding: 8px 14px; border-radius: var(--lp-radius-sm); border: 1px solid var(--lp-input-border); background: var(--lp-surface); color: var(--lp-primary); font-size: 14px; font-weight: 550; text-decoration: none; min-height: 40px; }
+.lp-job-apply:hover { background: var(--lp-surface-blue); }
+.lp-job-side { display: flex; flex-direction: column; align-items: center; gap: var(--lp-space-5); padding-left: var(--lp-space-4); border-left: 1px solid var(--lp-border); min-width: 0; }
+.lp-job-save { display: inline-flex; align-items: center; justify-content: center; gap: var(--lp-space-2); align-self: flex-end; padding: 8px 14px; min-height: 40px; color: var(--lp-text); background: var(--lp-surface); border: 1px solid var(--lp-input-border); border-radius: var(--lp-radius-sm); font-size: 14px; transition: background var(--lp-duration-fast) var(--lp-ease), transform var(--lp-duration-fast) var(--lp-ease); }
+.lp-job-save svg { width: 17px; height: 17px; }
+.lp-job-save:hover, .lp-job-save[aria-pressed='true'] { background: var(--lp-surface-blue); color: var(--lp-primary); border-color: var(--lp-primary); }
+.lp-job-save:active { transform: translateY(1px); }
+.lp-job-match { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--lp-space-2); width: 100%; }
+.lp-match-ring { position: relative; width: 80px; height: 80px; display: grid; place-items: center; flex-shrink: 0; }
+.lp-match-ring svg { position: absolute; inset: 0; width: 80px; height: 80px; transform: rotate(-90deg); overflow: visible; }
+.lp-match-ring circle { fill: none; stroke-width: 4; }
+.lp-ring-track { stroke: var(--lp-border); }
+.lp-ring-fill { stroke: var(--lp-primary); stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: calc(100 - var(--lp-ring-progress)); }
+.lp-match-ring.is-neutral .lp-ring-fill { stroke: none; }
+.lp-match-ring > span { font: 450 24px/1 var(--lp-font-mono); color: var(--lp-text); }
+.lp-match-ring small { font-size: 14px; }
+.lp-match-label { color: var(--lp-muted); font: 400 14px/1.5 var(--lp-font-mono); letter-spacing: .025em; }
+.lp-missing-chip { max-width: 100%; padding: 5px 8px; border-radius: var(--lp-radius-sm); border: 1px solid var(--lp-accent); background: var(--lp-accent-soft); color: var(--lp-accent); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.lp-match-complete { color: var(--lp-success); font-size: 14px; line-height: 1.5; }
+.lp-match-caveat { color: var(--lp-muted); font-size: 14px; }
+.lp-profile-link { min-height: 44px; padding: 0; background: none; border: 0; color: var(--lp-primary); font-size: 14px; line-height: 1.6; text-decoration: underline; text-underline-offset: 3px; }
+.lp-jobs-pagination { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: var(--lp-space-4); margin-top: var(--lp-space-8); }
+.lp-jobs-pagination > span { font: 400 14px/1.6 var(--lp-font-mono); color: var(--lp-muted); }
+.lp-jobs-pagination button { min-height: 44px; }
+.lp-jobs-state { padding: var(--lp-space-12) var(--lp-space-6); border: 1px solid var(--lp-border); border-radius: var(--lp-radius-lg); background: var(--lp-surface); text-align: center; }
+.lp-jobs-state > svg { width: 36px; height: 36px; color: var(--lp-primary); margin-bottom: var(--lp-space-4); }
+html .app-shell .lp-jobs-state h2 { color: var(--lp-text) !important; font-size: 26px !important; line-height: 1.25; }
+.lp-jobs-state p { color: var(--lp-muted); font-size: 16px; line-height: var(--lp-leading-body); max-width: 500px; margin: var(--lp-space-4) auto var(--lp-space-6); overflow-wrap: anywhere; }
+.lp-jobs-state.is-error > svg { color: var(--lp-danger); }
+.lp-job-skeleton { min-height: 340px; border: 1px solid var(--lp-border); border-radius: var(--lp-radius-lg); background: var(--lp-surface); padding: var(--lp-space-6); }
+.lp-skeleton-line { height: 14px; max-width: 70%; margin-bottom: 20px; border-radius: var(--lp-radius-sm); background: var(--lp-surface-soft); }
+.lp-skeleton-line.is-logo { width: 42px; height: 42px; }
+.lp-skeleton-line.is-title { height: 26px; max-width: 85%; }
+.lp-skeleton-line.is-short { max-width: 40%; }
+.lp-skeleton-line.is-footer { margin-top: 70px; max-width: 55%; }
+@media (prefers-reduced-motion: no-preference) {
+  .lp-ring-fill { animation: lp-ring-enter 800ms var(--lp-ease) both; }
+  .lp-skeleton-line { animation: lp-skeleton-pulse 1.6s ease-in-out infinite alternate; }
+}
+@keyframes lp-ring-enter { from { stroke-dashoffset: 100; } to { stroke-dashoffset: calc(100 - var(--lp-ring-progress)); } }
+@keyframes lp-skeleton-pulse { from { opacity: .45; } to { opacity: 1; } }
+@media (max-width: 1000px) { .lp-jobs-grid { grid-template-columns: 1fr; } .lp-job-card { grid-template-columns: minmax(0,1fr) 164px; } }
+@media (max-width: 600px) {
+  html .app-shell .lp-jobs { padding-top: var(--lp-space-3); }
+  html .app-shell .lp-jobs .nova-job-search { flex-wrap: wrap; padding: var(--lp-space-3) !important; }
+  html .app-shell .lp-jobs .nova-job-search-input { flex-basis: 100%; padding-left: 0; }
+  html .app-shell .lp-jobs .nova-job-search > button { width: 100%; justify-content: space-between; }
+  html .app-shell .lp-jobs #job-filters { padding: var(--lp-space-4); }
+  html .app-shell .lp-jobs .nova-filter-heading { align-items: flex-start; flex-wrap: wrap; }
+  html .app-shell .lp-jobs .nova-filter-footer > div { display: flex; flex-wrap: wrap; gap: var(--lp-space-2); }
+  html .app-shell .lp-jobs .nova-results-heading { flex-direction: column; align-items: flex-start; }
+  html .app-shell .lp-jobs .wf-field { display: flex; flex-direction: column; align-items: stretch; gap: var(--lp-space-2); }
+  html .app-shell .lp-jobs .wf-inline { display: flex; flex-wrap: wrap; }
+  html .app-shell .lp-jobs .wf-inline > :is(input,select) { min-width: 0; width: 100%; }
+  .lp-job-card { grid-template-columns: minmax(0,1fr); padding: var(--lp-space-5); }
+  .lp-job-main { padding-right: 0; }
+  .lp-job-side { flex-direction: row-reverse; align-items: flex-start; justify-content: space-between; padding: var(--lp-space-4) 0 0; margin-top: var(--lp-space-4); border-left: 0; border-top: 1px solid var(--lp-border); gap: var(--lp-space-3); }
+  .lp-job-save { align-self: flex-start; }
+  .lp-job-match { display: grid; grid-template-columns: 64px minmax(0,1fr); text-align: left; align-items: center; justify-items: start; width: auto; flex: 1; gap: 4px 14px; }
+  .lp-match-ring { grid-row: 1 / 5; width: 64px; height: 64px; }
+  .lp-match-ring svg { width: 64px; height: 64px; }
+  .lp-match-ring > span { font-size: 20px; }
+  .lp-match-label, .lp-missing-chip, .lp-match-complete, .lp-profile-link, .lp-match-caveat { grid-column: 2; }
+  .lp-job-heading .company-logo { flex-shrink: 0; }
+  .lp-profile-link { font-size: 14px; }
+}
+@media (max-width: 380px) {
+  .lp-job-card { padding: var(--lp-space-4); }
+  .lp-job-match { grid-template-columns: 52px minmax(0,1fr); gap: 4px 8px; }
+  .lp-match-ring, .lp-match-ring svg { width: 52px; height: 52px; }
+  .lp-match-ring > span { font-size: 17px; }
+  .lp-job-save { padding-inline: 8px; gap: 5px; }
+}
+@media (prefers-reduced-motion: reduce) { .lp-jobs *, .lp-jobs *::before, .lp-jobs *::after { animation: none !important; transition: none !important; } }
+
+.lp-sort-note { display: block; font-size: 14px; line-height: 1.7; color: var(--lp-muted); margin-top: var(--lp-space-2); }
+
+html .app-shell .lp-jobs :is(.nova-job-search > button, .nova-filter-footer button, .nova-skill-options label, .nova-skill-options button, .nova-filter-pill, .lp-jobs-pagination button, .lp-jobs-state button, .nova-full-location-list) { font-size: 14px !important; }
+.lp-job-compensation strong.is-unlisted { color: var(--lp-muted); font-weight: 400; }
+.lp-match-count { font: 400 14px/1.5 var(--lp-font-mono); color: var(--lp-muted); }
+@media (max-width: 600px) { .lp-match-count { grid-column: 2; } .lp-match-ring { grid-row: 1 / 6; } }
+
+html .app-shell .lp-jobs > .nova-eyebrow, html .app-shell .lp-jobs .nova-filter-toolbar > span, html .app-shell .lp-jobs option { font-size: 14px !important; }

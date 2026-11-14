@@ -1,0 +1,48 @@
+/* Only the requested Dashboard, Job Details and Profile controls. */
+html .app-shell :is(.nova-dashboard-job-lists,.nova-dashboard-all-jobs) .nova-similar-identity :is(h3, h3 button) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+html .app-shell :is(.nova-dashboard-job-lists,.nova-dashboard-all-jobs) .nova-similar-row > .nova-resume-match {
+  flex-direction: column;
+  gap: 0 !important;
+  padding: var(--lp-space-1) var(--lp-space-2) !important;
+  border-width: 1px !important;
+  box-shadow: none !important;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  max-width: 8rem;
+}
+html .app-shell :is(.nova-dashboard-job-lists,.nova-dashboard-all-jobs) .nova-similar-row > .nova-resume-match > span[aria-hidden] {
+  display: none;
+}
+html .app-shell :is(.nova-dashboard-job-lists,.nova-dashboard-all-jobs) .nova-similar-row > .nova-resume-match small {
+  font-size: var(--lp-text-xs);
+  font-weight: 400;
+}
+html .app-shell :is(.nova-dashboard-job-lists,.nova-dashboard-all-jobs) .nova-saved-remove,
+html .app-shell .wf-job-actions .nova-detail-save {
+  width: auto;
+  height: auto;
+  min-height: 44px;
+  padding: var(--lp-space-2) var(--lp-space-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lp-space-2);
+  flex-shrink: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+html .app-shell .nova-detail-save svg { flex-shrink: 0; }
+html .app-shell :is(.wf-overview,.wf-detail-columns) .nova-not-listed { color: var(--lp-muted) !important; font-weight: 400; }
+html .app-shell .wf-detail-columns > div > .job-description-section { background: var(--lp-surface); color: var(--lp-text); }
+html .app-shell .nova-account-settings-link { display: inline-block; margin-block: var(--lp-space-4); color: var(--lp-primary); font-size: 14px; text-decoration: underline; text-underline-offset: 3px; }
+html .app-shell #profile-account-settings { scroll-margin-top: 110px; }
+@media (max-width: 600px) {
+  .nova-dashboard-job-lists .nova-similar-row:has(.nova-saved-remove),
+  .nova-dashboard-all-jobs .nova-similar-row:has(.nova-saved-remove) { flex-wrap: wrap; }
+  .nova-dashboard-job-lists .nova-similar-row:has(.nova-saved-remove) .nova-similar-identity,
+  .nova-dashboard-all-jobs .nova-similar-row:has(.nova-saved-remove) .nova-similar-identity { flex-basis: calc(100% - 60px); }
+}

@@ -35,7 +35,14 @@ export default function ContactSupport({ token }) {
     finally { setBusy(false); }
   }
   return <>
-    <footer className="nova-footer"><span>NovaTeck · Your next opportunity starts here</span><button type="button" className="text-button" onClick={open}>Contact Support</button></footer>
+    <footer className="nova-footer">
+      <span>NovaTeck · Your next opportunity starts here</span>
+      <nav className="nova-footer-links" aria-label="Footer">
+        <a href="/privacy.html">Privacy Policy</a>
+        <a href="/terms.html">Terms of Use</a>
+        <button type="button" className="text-button" onClick={open}>Contact Support</button>
+      </nav>
+    </footer>
     <dialog ref={dialog} className="nova-support-dialog" aria-labelledby="support-title">
       <header><div><span className="nova-eyebrow">WE’RE HERE TO HELP</span><h2 id="support-title">Contact Support</h2></div><button type="button" className="wf-secondary" aria-label="Close contact support" onClick={() => dialog.current?.close()}>×</button></header>
       <p>Have a question or found a problem? Tell us what happened. Please leave out passwords and sensitive details.</p>

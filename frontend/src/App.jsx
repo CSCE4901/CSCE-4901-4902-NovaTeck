@@ -1,14 +1,19 @@
-import JobCard from './components/JobCard';
+import LaunchpadJobCard from './components/LaunchpadJobCard';
+import { sortJobsByProfileMatch } from './components/profileMatch';
+import { JobsSkeleton, JobsEmpty, JobsError } from './components/JobsStates';
 import { careerCategories } from './careerCategories';
 import ContactSupport from "./components/ContactSupport";
 import CareerChat from "./components/CareerChat";
 import NavIcon from "./components/NavIcon";
 import NovaLogo from "./components/NovaLogo";
+import NovaBadge from "./components/NovaBadge";
 import HomePage from "./components/HomePage";
 import { responseError } from "./apiErrors";
-import { useState, useEffect, useRef, createContext, useContext } from "react";
+import { useState, useEffect, useRef, useMemo, createContext, useContext } from "react";
 import { WireDashboard, WireProfile, WireJobDetail, WireSkillGap, WireAdmin } from "./components/WireframePages";
 import "./styles.css";
+import "./launchpad-shared.css";
+import "./components/JobsPage.css";
 
 const API = "/api";
 const AuthContext = createContext(null);
@@ -32,6 +37,11 @@ async function apiFetch(path, options = {}, token = null) {
     if (res.status === 401 && token) window.dispatchEvent(new Event("novateck-session-expired"));
     const error = new Error(responseError(res.status, data.error)); error.status = res.status; throw error;
   }
+  if (/^\/students\/\d+\/skills$/.test(path) && options.method === 'PUT') {
+    const userId = Number(path.split('/')[2]);
+    const submitted = JSON.parse(options.body || '{}').skills;
+    window.dispatchEvent(new CustomEvent('novateck-profile-skills-saved', { detail: { userId, skills: submitted } }));
+  }
   return data;
 }
 
@@ -45,7 +55,14 @@ export default function App() {
   });
   const [homeFocus,setHomeFocus]=useState(null);
   const [profileFocus, setProfileFocus] = useState(null);
-  const [page, setPage] = useState(() => new URLSearchParams(window.location.search).get("resetToken") ? "reset" : (auth ? (["/admin", "/admin/flagged-skills"].includes(window.location.pathname) ? "admin" : "jobs") : "login"));
+  const [registrationLink] = useState(() => {
+    const params = new URLSearchParams(window.location.hash.slice(1));
+    return { token: params.get("registrationToken"), email: params.get("email") || "" };
+  });
+  useEffect(() => {
+    if (registrationLink.token) window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+  }, [registrationLink]);
+  const [page, setPage] = useState(() => !auth && registrationLink.token ? "register" : new URLSearchParams(window.location.search).get("resetToken") ? "reset" : (auth ? (["/admin", "/admin/flagged-skills"].includes(window.location.pathname) ? "admin" : "home") : "login"));
   const [selectedJobId, setSelectedJobId] = useState(null);
   const [jobReturnPage, setJobReturnPage] = useState("jobs");
   const [theme, setTheme] = useState(() => localStorage.getItem("nt_theme") || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
@@ -57,24 +74,35 @@ export default function App() {
     return () => device.removeEventListener('change', apply);
   }, [theme]);
 
+  const profileSkillsRevision = useRef(0);
   useEffect(() => {
     if (!auth) return;
     let active = true;
     const token = auth.token;
+    const revision = profileSkillsRevision.current;
     apiFetch(`/students/${auth.user_id}`, {}, token).then(user => {
       if (!active) return;
       const profile = { user_id: user.user_id, name: user.name, role: user.role };
       for (const storage of [localStorage, sessionStorage]) {
         if (storage.getItem("nt_token") === token) storage.setItem("nt_user", JSON.stringify(profile));
       }
-      setAuth(current => current?.token === token ? { ...current, ...profile } : current);
-    }).catch(error => { if (active && error.status === 401) logout(); });
+      setAuth(current => current?.token === token ? { ...current, ...profile, ...(revision === profileSkillsRevision.current ? { profileSkills: (user.skills || '').split(',').map(skill => skill.trim()).filter(Boolean), profileSkillsError: false } : {}) } : current);
+    }).catch(error => { if (active && error.status === 401) logout(); else if (active) setAuth(current => current?.token === token ? { ...current, profileSkillsError: true } : current); });
     return () => { active = false; };
   }, [auth?.token]);
 
   useEffect(() => {
     window.addEventListener("novateck-session-expired", logout);
     return () => window.removeEventListener("novateck-session-expired", logout);
+  }, []);
+
+  useEffect(() => {
+    const updateSkills = event => {
+      profileSkillsRevision.current += 1;
+      setAuth(current => String(current?.user_id) === String(event.detail.userId) ? { ...current, profileSkills: Array.isArray(event.detail.skills) ? event.detail.skills : String(event.detail.skills || '').split(',').map(skill => skill.trim()).filter(Boolean), profileSkillsError: false } : current);
+    };
+    window.addEventListener('novateck-profile-skills-saved', updateSkills);
+    return () => window.removeEventListener('novateck-profile-skills-saved', updateSkills);
   }, []);
 
   function login(token, user, remember = false) {
@@ -128,15 +156,15 @@ export default function App() {
 
   return (
     <AuthContext.Provider value={auth}>
-      <div className="app-shell">
+      <div className={`app-shell${["home", "jobs", "detail", "dashboard", "profile", "skillgap"].includes(page) ? " lp-aligned-shell" : ""}`}>
         {!["login", "register"].includes(page) && <Navbar page={page} setPage={setPage} logout={logout} auth={auth} theme={theme} deviceTheme={deviceTheme} setTheme={setTheme} />}
         <div className="nova-page-container">
           {page === "login"     && <LoginPage onLogin={login} setPage={setPage} />}
-          {page === "register"  && <RegisterPage onLogin={login} setPage={setPage} />}
+          {page === "register"  && <RegisterPage onLogin={login} setPage={setPage} registrationLink={registrationLink} />}
           {page === "forgot"    && <ForgotPasswordPage setPage={setPage} />}
           {page === "reset"     && <ResetPasswordPage setPage={setPage} />}
           {page === "home" && auth && <HomePage browseField={field=>{setHomeFocus(field);setPage('jobs');}} setPage={setPage} auth={auth} request={apiFetch} goJob={goJob} />}
-          {page === "jobs"      && <JobListingsPage initialFocus={homeFocus} goJob={goJob} />}
+          {page === "jobs"      && <JobListingsPage initialFocus={homeFocus} goJob={goJob} onProfile={() => setPage('profile')} />}
           {page === "detail"    && <WireJobDetail auth={auth} request={apiFetch} jobId={selectedJobId} goJob={goJob} setPage={setPage} onBack={backFromJob} returnPage={jobReturnPage} />}
           {page === "dashboard" && <WireDashboard auth={auth} request={apiFetch} goJob={goJob} setPage={(next, field) => { setProfileFocus(field || null); setPage(next); }} />}
           {page === "profile" && <WireProfile focusField={profileFocus} auth={auth} request={apiFetch} onNameChange={updateDisplayName} setPage={setPage} />}
@@ -199,11 +227,11 @@ export function Navbar({ page, setPage, logout, auth, theme, deviceTheme, setThe
   ];
   return (
     <nav ref={navRef} style={{ "--nova-nav-height": `${navHeight}px` }} className={`nova-nav${mobileOpen ? " is-mobile-open" : ""}${scrollHidden ? " is-scroll-hidden" : ""}`} onFocusCapture={() => setScrollHidden(false)} aria-label="Main navigation" onKeyDown={event => { if (event.key === "Escape") setMobileOpen(false); }}>
-      <button className="nova-brand nova-logo-button" onClick={() => setPage(auth ? 'home' : 'login')} aria-label="NovaTeck home"><NovaLogo /></button>
+      <button className="nova-brand nova-logo-button" onClick={() => setPage(auth ? 'home' : 'login')} aria-label="NovaTeck home"><NovaBadge size={64} /></button>
       <button type="button" className="nova-mobile-menu" aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={mobileOpen} aria-controls="nova-navigation-links" onClick={() => setMobileOpen(value => !value)}><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d={mobileOpen ? 'M6 6l12 12M6 18 18 6' : 'M4 6h16M4 12h16M4 18h16'} /></svg></button>
       <div className="nova-nav-links" id="nova-navigation-links">
         {auth && tabs.map(([key, label]) => <button key={key} className="nova-nav-tab" aria-current={page === key ? 'page' : undefined} onClick={() => setPage(key)}><NavIcon name={key} />{label}</button>)}
-        {auth && <CareerChat key={auth.user_id} token={auth.token} />}
+        {auth && <CareerChat key={auth.user_id} token={auth.token} profileSkills={auth.profileSkills} />}
       </div>
       <div className="nova-nav-account">
         <div className="nova-settings-wrap"><button type="button" className="nova-theme-toggle" aria-label="Settings" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(value => !value)}><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M9.5 3h5l.7 2.6 2 .9 2.4-.7 2.5 4.4-1.8 1.9v2l1.8 1.9-2.5 4.4-2.4-.7-2 .9-.7 2.4h-5l-.7-2.4-2-.9-2.4.7-2.5-4.4 1.8-1.9v-2L2 10.2l2.5-4.4 2.4.7 2-.9Z" /><circle cx="12" cy="12.5" r="3.3" /></svg></button>{settingsOpen && <><button className="nova-settings-backdrop" type="button" aria-label="Close settings" onClick={() => setSettingsOpen(false)} /><div className="nova-settings-panel" onKeyDown={event => { if (event.key === 'Escape') setSettingsOpen(false); }}><header><h2>Settings</h2><button type="button" className="text-button" aria-label="Close settings" onClick={() => setSettingsOpen(false)}>×</button></header><p>Appearance</p><select className="nova-settings-option" aria-label="Appearance" value={theme} onChange={event => setTheme(event.target.value)}><option value="light">Light</option><option value="dark">Dark</option><option value="system">Use device theme</option></select>{auth && <><p>Job preferences</p><button type="button" className="wf-secondary nova-settings-option" disabled={restoring} onClick={restoreHidden}>{restoring ? 'Restoring…' : 'Restore Hidden Jobs'}</button>{restoreMessage && <small className="nova-device-theme-note" role="status">{restoreMessage}</small>}</>}<p>Account & help</p><button type="button" className="wf-secondary nova-settings-option" onClick={() => { setSettingsOpen(false); setPage('forgot'); }}>Reset Password</button><button type="button" className="wf-secondary nova-settings-option" onClick={() => { setSettingsOpen(false); window.dispatchEvent(new Event('novateck-contact-support')); }}>Contact Support</button></div></>}</div>
@@ -293,7 +321,7 @@ export function ForgotPasswordPage({ setPage }) {
 }
 
 export function ResetPasswordPage({ setPage }) {
-  const [token, setToken] = useState(() => new URLSearchParams(window.location.search).get("resetToken") || "");
+  const [token, setToken] = useState(() => !auth && registrationLink.token ? "register" : new URLSearchParams(window.location.search).get("resetToken") || "");
   const [password, setPassword] = useState(""); const [confirm, setConfirm] = useState(""); const [message, setMessage] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -315,36 +343,48 @@ export function ResetPasswordPage({ setPage }) {
 }
 
 // RegisterPage
-function RegisterPage({ onLogin, setPage }) {
-  const [form, setForm] = useState({ name: "", email: "", password: "", confirmPassword: "" });
+function RegisterPage({ onLogin, setPage, registrationLink }) {
+  const [verificationToken, setVerificationToken] = useState(registrationLink.token);
+  const [notice, setNotice] = useState("");
+  const [form, setForm] = useState({ name: "", email: registrationLink.email, password: "", confirmPassword: "" });
   const [err, setErr] = useState("");
   const [errors, setErrors] = useState({});
   function updateField(field, value) {
     setForm(current => ({ ...current, [field]: value }));
     setErrors(current => ({ ...current, [field]: "", ...(field === "password" ? { confirmPassword: "" } : {}) }));
     setErr("");
+    if (field === "email") {
+      setVerificationToken(null);
+      setNotice("");
+    }
   }
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit() {
     setErr("");
+    setNotice("");
     const nextErrors = {};
-    if (!form.name.trim()) nextErrors.name = "Enter your full name.";
     if (!EMAIL_PATTERN.test(form.email.trim())) nextErrors.email = "Enter a valid email address.";
+    if (!form.name.trim()) nextErrors.name = "Enter your full name.";
     if (!PASSWORD_PATTERN.test(form.password)) nextErrors.password = "Use 8+ characters with uppercase, lowercase, and a number.";
-    if (!form.confirmPassword || form.password !== form.confirmPassword) nextErrors.confirmPassword = "Passwords do not match.";
+    if (!form.confirmPassword || form.confirmPassword !== form.password) nextErrors.confirmPassword = "Passwords do not match.";
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
     setLoading(true);
     try {
-      const { confirmPassword, ...registration } = form;
-      const data = await apiFetch("/auth/register", { method: "POST", body: JSON.stringify(registration) });
-      onLogin(data.token, { user_id: data.user_id, name: data.name });
-    } catch (e) {
-      if (/email.*(already|registered|exists)/i.test(e.message)) setErrors({ email: e.message });
-      else setErr(e.message);
+      if (verificationToken) {
+        const { name, email, password } = form;
+        const data = await apiFetch("/auth/register", { method: "POST", body: JSON.stringify({ name, email, password, verification_token: verificationToken }) });
+        onLogin(data.token, { user_id: data.user_id, name: data.name });
+      } else {
+        const data = await apiFetch("/auth/register/request", { method: "POST", body: JSON.stringify({ email: form.email }) });
+        setNotice(data.message);
+      }
+    } catch (error) {
+      setErr(error.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   const strength = !form.password ? 0 : !PASSWORD_PATTERN.test(form.password) ? 1 : form.password.length < 12 ? 2 : 3;
@@ -353,6 +393,7 @@ function RegisterPage({ onLogin, setPage }) {
     <AuthLayout title="Create an Account" variant="register" setPage={setPage}>
       <form className="auth-form" noValidate onSubmit={event => { event.preventDefault(); handleSubmit(); }}>
         {err && <div className="auth-form-message"><Alert msg={err} /></div>}
+        {notice && <p className="auth-form-message" role="status">{notice}</p>}
         <AuthField id="register-name" label="Full Name" autoComplete="name" placeholder="Jane Doe" value={form.name} error={errors.name} onChange={name => updateField("name", name)} />
         <AuthField id="register-email" label="Email address" type="email" autoComplete="email" placeholder="you@example.com" value={form.email} error={errors.email} onChange={email => updateField("email", email)} />
         <AuthField id="register-password" label="Password" type="password" autoComplete="new-password" placeholder="At least 8 characters" value={form.password} error={errors.password} onChange={password => updateField("password", password)} describedBy="password-strength">
@@ -363,8 +404,14 @@ function RegisterPage({ onLogin, setPage }) {
           </div>
         </AuthField>
         <AuthField id="register-confirm" label="Confirm Password" type="password" autoComplete="new-password" placeholder="Re-enter your password" value={form.confirmPassword} error={errors.confirmPassword} onChange={confirmPassword => updateField("confirmPassword", confirmPassword)} />
-        <div className="auth-actions"><button className="primary-button auth-submit" type="submit" disabled={loading}>{loading ? "Creating account…" : "Create Account"}</button></div>
+        <div className="auth-actions">
+          <button className="primary-button auth-submit" type="submit" disabled={loading}>
+            {loading ? (verificationToken ? "Creating account…" : "Sending verification link…") : "Create Account"}
+          </button>
+          {verificationToken && <button className="text-button" type="button" disabled={loading} onClick={() => { setVerificationToken(null); setErr(""); }}>Request a New Link</button>}
+        </div>
         <div className="auth-links">
+          <p className="nova-policy-links"><a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a> · <a href="/terms.html" target="_blank" rel="noopener">Terms of Use</a></p>
           <p>Already have an account? <button className="text-button" type="button" onClick={() => setPage("login")}>Sign In Here</button></p>
           <p><button className="text-button" type="button" onClick={() => setPage("forgot")}>Forgot Password?</button></p>
         </div>
@@ -374,7 +421,7 @@ function RegisterPage({ onLogin, setPage }) {
 }
 
 // JobListingsPage
-function JobListingsPage({ goJob, initialFocus }) {
+function JobListingsPage({ goJob, initialFocus, onProfile }) {
   const auth = useAuth();
   const [focus, setFocus] = useState(initialFocus ? [initialFocus] : []);
   const [sort, setSort] = useState("match");
@@ -389,7 +436,14 @@ function JobListingsPage({ goJob, initialFocus }) {
   const [options, setOptions]   = useState({ skills: [], companies: [], locations: [] });
   const [page, setPage]         = useState(0);
   const [total, setTotal]       = useState(0);
+  const displayedJobs = useMemo(() => sort === 'match'
+    ? sortJobsByProfileMatch(jobs, auth?.profileSkills).slice(page * 20, (page + 1) * 20)
+    : jobs, [jobs, sort, page, auth?.profileSkills]);
   const [msg, setMsg]           = useState("");
+  const [listError, setListError] = useState('');
+  const [applied, setApplied] = useState({ query: '', skill: [], location: '', companyId: '', experience: '', workTypes: [], focus: initialFocus ? [initialFocus] : [] });
+  const lastAttempt = useRef(null);
+  const loadSequence = useRef(0);
 
   const [savedIds, setSavedIds] = useState([]), [saving, setSaving] = useState(null), [savedReady, setSavedReady] = useState(false);
   const [applicationStatuses, setApplicationStatuses] = useState({});
@@ -433,31 +487,47 @@ function JobListingsPage({ goJob, initialFocus }) {
     const count = await load(0);
     if (count !== undefined) setFilterFeedback(`✓ Filters applied · ${count} jobs found`);
   }
-  async function load(nextPage = page, resetFilters = false, nextSort = sort, nextFocus = focus) {
+  async function load(nextPage = page, resetFilters = false, nextSort = sort, nextFocus = focus, override = null) {
+    const selected = override || (resetFilters ? { query: '', skill: [], location: '', companyId: '', experience: '', workTypes: [], focus: [] } : { query, skill, location, companyId, experience, workTypes, focus: nextFocus });
+    lastAttempt.current = { selected, nextPage, nextSort };
+    const sequence = ++loadSequence.current;
+    setListError('');
     setLoading(true);
     try {
       const params = new URLSearchParams();
       params.append("sort", nextSort);
-      if (!resetFilters) nextFocus.forEach(value => params.append("discipline", value));
-      if (!resetFilters && query) params.append("q", query);
-      if (!resetFilters) skill.forEach(value => params.append("skill", value));
-      if (!resetFilters && location) params.append("location", location);
-      if (!resetFilters && companyId) params.append("company_id", companyId);
-      if (!resetFilters && experience) params.append("experience", experience);
-      if (!resetFilters && workTypes.length) params.append("work_type", workTypes.join(","));
-      params.append("limit", "20");
-      params.append("offset", String(nextPage * 20));
+      selected.focus.forEach(value => params.append("discipline", value));
+      if (selected.query) params.append("q", selected.query);
+      selected.skill.forEach(value => params.append("skill", value));
+      if (selected.location) params.append("location", selected.location);
+      if (selected.companyId) params.append("company_id", selected.companyId);
+      if (selected.experience) params.append("experience", selected.experience);
+      if (selected.workTypes.length) params.append("work_type", selected.workTypes.join(","));
+      params.append("limit", nextSort === "match" ? "500" : "20");
+      params.append("offset", nextSort === "match" ? "0" : String(nextPage * 20));
       const [data, count] = await Promise.all([
         apiFetch(`/jobs?${params}`, {}, auth?.token),
         apiFetch(`/jobs/count?${params}`, {}, auth?.token),
       ]);
-      setJobs(Array.isArray(data) ? data : []);
+      if (sequence !== loadSequence.current) return;
+      const rows = Array.isArray(data) ? [...data] : [];
+      if (nextSort === 'match') {
+        for (let offset = 500; offset < (count.total || 0); offset += 500) {
+          params.set('offset', String(offset));
+          const more = await apiFetch(`/jobs?${params}`, {}, auth?.token);
+          if (sequence !== loadSequence.current) return;
+          if (!Array.isArray(more) || !more.length) break;
+          rows.push(...more);
+        }
+      }
+      setApplied(selected);
+      setJobs(rows);
       setTotal(count.total || 0);
       setPage(nextPage);
       setMsg("");
       setLoading(false);
       return count.total || 0;
-    } catch (error) { setJobs([]); setTotal(0); setMsg(error.message); }
+    } catch (error) { if (sequence !== loadSequence.current) return; setJobs([]); setTotal(0); setListError(error.message); }
     setLoading(false);
   }
 
@@ -472,13 +542,37 @@ function JobListingsPage({ goJob, initialFocus }) {
     load(0, true);
   }
 
-  return (
-    <main className="wf-page">
-      <p className="nova-eyebrow">FIND YOUR NEXT MOVE</p><h1>DFW Tech Jobs</h1>
-      <p className="nova-jobs-subtitle">Browse roles with DFW locations.</p>
+  function retryJobs() {
+    const attempt = lastAttempt.current;
+    if (attempt) load(attempt.nextPage, false, attempt.nextSort, attempt.selected.focus, attempt.selected);
+    else load(0);
+  }
+  function removeFilter(key, value) {
+    const next = { ...applied };
+    if (Array.isArray(next[key])) next[key] = next[key].filter(item => item !== value);
+    else if (key === 'experience') next.experience = next.experience.split(',').filter(item => item !== value).join(',');
+    else next[key] = '';
+    setQuery(next.query); setSkill(next.skill); setLocation(next.location); setCompanyId(next.companyId); setExperience(next.experience); setWorkTypes(next.workTypes); setFocus(next.focus);
+    load(0, false, sort, next.focus, next);
+  }
+  const activeChips = [
+    ...(applied.query ? [{ key: 'query', value: applied.query, label: `Search: ${applied.query}` }] : []),
+    ...applied.focus.map(value => ({ key: 'focus', value, label: careerCategories.find(([key]) => key === value)?.[1] || value })),
+    ...applied.skill.map(value => ({ key: 'skill', value, label: value })),
+    ...applied.workTypes.map(value => ({ key: 'workTypes', value, label: value })),
+    ...applied.experience.split(',').filter(Boolean).map(value => ({ key: 'experience', value, label: ({ entry: 'Entry / intern', mid: 'Mid-level', senior: 'Senior / lead' })[value] || value })),
+    ...(applied.location ? [{ key: 'location', value: applied.location, label: applied.location }] : []),
+    ...(applied.companyId ? [{ key: 'companyId', value: applied.companyId, label: options.companies.find(company => String(company.company_id) === String(applied.companyId))?.name || 'Selected company' }] : []),
+  ];
 
-      <div className="wf-search-row nova-job-search"><div className="nova-job-search-input"><NavIcon name="jobs" /><input id="job-search" aria-label="Search jobs" placeholder="Search job titles, companies, or keywords" value={query} onChange={event => setQuery(event.target.value)} onKeyDown={event => event.key === "Enter" && applyFilters()} /></div><button className="primary-button" disabled={loading} onClick={applyFilters}>Search</button></div>
-      <div className="nova-filter-toolbar"><button type="button" className="wf-secondary" aria-expanded={filtersOpen} aria-controls="job-filters" onClick={() => setFiltersOpen(open => !open)}>Filters ({filterCount})</button><button type="button" className="text-button" onClick={clearFilters} disabled={loading}>Clear all</button><span role="status">{filterFeedback || "Results update when you apply filters."}</span></div>
+  return (
+    <main className="wf-page lp-jobs">
+      <p className="nova-eyebrow">FIND YOUR NEXT MOVE</p><h1>Your next opportunity.</h1>
+      <p className="nova-jobs-subtitle">Explore technology roles in DFW. Find the work that moves you forward.</p>
+
+      <form className="wf-search-row nova-job-search" role="search" onSubmit={event => { event.preventDefault(); applyFilters(); }}><div className="nova-job-search-input"><NavIcon name="jobs" /><input id="job-search" aria-label="Search jobs" placeholder="Search job titles, companies, or keywords" value={query} onChange={event => setQuery(event.target.value)} /></div><button type="submit" className="primary-button" disabled={loading}>Search jobs <span aria-hidden="true">↗</span></button></form>
+      <div className="nova-filter-toolbar"><button type="button" className="wf-secondary" aria-expanded={filtersOpen} aria-controls="job-filters" onClick={() => setFiltersOpen(open => !open)}>Filters ({filterCount})</button><button type="button" className="text-button" onClick={clearFilters} disabled={loading}>Clear all</button><span role="status">{filterFeedback || "Select filters, then apply to update your search."}</span></div>
+      {activeChips.length > 0 && <div className="lp-active-filters" aria-label="Active filters">{activeChips.map(chip => <button type="button" disabled={loading} key={`${chip.key}:${chip.value}`} onClick={() => removeFilter(chip.key, chip.value)} aria-label={`Remove filter: ${chip.label}`}>{chip.label}<span aria-hidden="true">×</span></button>)}</div>}
       <section id="job-filters" hidden={!filtersOpen} className="wf-filters nova-filter-panel"><header className="nova-filter-heading"><div className="nova-filter-title"><span className="nova-filter-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6" /></svg></span><div><h2>Filters</h2><p>Fine-tune your next opportunity.</p></div></div><span className="nova-filter-count">{filterCount} selected</span></header>
         <div className="wf-field"><span id="job-focus-label">Career Focus</span><details className="nova-skill-select"><summary aria-labelledby="job-focus-label job-focus-summary"><span id="job-focus-summary">{focus.length === 1 ? careerCategories.find(([value]) => value === focus[0])?.[1] : focus.length ? `${focus.length} career fields selected` : 'All Career Categories'}</span><span aria-hidden="true">⌄</span></summary><div className="nova-skill-options"><button type="button" className="text-button" onClick={() => setFocus([])}>All Career Categories</button>{careerCategories.filter(([value]) => value).map(([value, label]) => <label key={value}><input type="checkbox" checked={focus.includes(value)} onChange={event => setFocus(current => event.target.checked ? [...current, value] : current.filter(item => item !== value))} />{label}</label>)}</div></details></div><div className="wf-field"><span>Work Type</span><div className="wf-inline">{['Full-time', 'Part-time', 'Contract', 'Internship'].map(type => <button type="button" className="nova-filter-pill" key={type} aria-pressed={workTypes.includes(type)} onClick={() => setWorkTypes(current => current.includes(type) ? current.filter(t => t !== type) : [...current, type])}>{type}</button>)}</div></div>
         <div className="wf-field"><span id="job-skill-label">Skills</span><details className="nova-skill-select"><summary aria-labelledby="job-skill-label job-skill-summary"><span id="job-skill-summary">{skill.length ? `${skill.length} skills selected` : 'All skills'}</span><span aria-hidden="true">⌄</span></summary><div className="nova-skill-options"><button type="button" className="text-button" onClick={() => setSkill([])}>Clear selected skills</button>{options.skills.map(value => <label key={value}><input type="checkbox" checked={skill.includes(value)} onChange={event => setSkill(current => event.target.checked ? [...current, value] : current.filter(item => item !== value))} />{value}</label>)}</div></details></div>
@@ -486,20 +580,20 @@ function JobListingsPage({ goJob, initialFocus }) {
         <div className="wf-field"><span>Location / Company</span><div className="wf-inline"><input placeholder="City or location" aria-label="Filter by location" value={location} onChange={e => setLocation(e.target.value)} list="location-options" /><datalist id="location-options">{options.locations.map(value => <option key={value} value={value} />)}</datalist><select aria-label="Filter by company" value={companyId} onChange={e => setCompanyId(e.target.value)}><option value="">All companies</option>{options.companies.map(c => <option key={c.company_id} value={c.company_id}>{c.name}</option>)}</select></div></div>
       <footer className="nova-filter-footer"><span role="status" className={filterFeedback ? "nova-filter-success" : ""}>{filterFeedback || (loading ? "Applying your filters…" : "Choose your filters, then apply to update results.")}</span><div><button className="wf-secondary" onClick={clearFilters} disabled={loading}>Reset</button><button className="primary-button" onClick={applyFilters} disabled={loading}>{loading ? 'Applying…' : 'Apply Filters'}</button></div></footer>
       </section>
-      {msg && <div style={{ background: "#d1fae5", color: "#065f46", padding: "10px 16px", borderRadius: 8, marginBottom: 16 }}>{msg}</div>}
+      {msg && <p className="lp-job-action-message" role="alert">{msg}</p>}
 
-      {loading ? <Spinner /> : (
+      {loading ? <JobsSkeleton /> : listError ? <JobsError message={listError} onRetry={retryJobs} /> : (
         <>
-          <div className="nova-results-heading"><div className="nova-results-title"><h2>Results</h2><p>{total} jobs found</p></div><label>Sort by <select value={sort} onChange={event => { setSort(event.target.value); load(0, false, event.target.value); }}><option value="match">Highest match</option><option value="newest">Newest posted</option></select></label></div>
-          <div style={{ display: "grid", gap: 16 }}>
-            {jobs.map(job => (
-              <JobCard key={job.job_id} job={job} goJob={goJob} saved={savedIds.includes(job.job_id)} onSave={toggleSave} busy={!savedReady || saving !== null} onApply={trackOpening} applicationStatus={applicationStatuses[job.job_id]} />
+          <div className="nova-results-heading"><div className="nova-results-title"><h2>Results</h2><p role="status">{total} opportunities in DFW</p><small className="lp-sort-note">Best match uses your profile skills. Scored jobs appear first; jobs without enough skill data follow.</small></div><label>Sort by <select value={sort} onChange={event => { setSort(event.target.value); load(0, false, event.target.value); }}><option value="match">Best match</option><option value="newest">Newest posted</option></select></label></div>
+          {jobs.length === 0 ? <JobsEmpty onClear={clearFilters} /> : <div className="lp-jobs-grid">
+            {displayedJobs.map(job => (
+              <LaunchpadJobCard profileSkills={auth?.profileSkills} profileError={auth?.profileSkillsError} onProfile={onProfile} key={job.job_id} job={job} goJob={goJob} saved={savedIds.includes(job.job_id)} onSave={toggleSave} busy={!savedReady || saving !== null} onApply={trackOpening} applicationStatus={applicationStatuses[job.job_id]} />
             ))}
-          </div>
-          {<div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 12, marginTop: 24 }}>
-            <button onClick={() => load(page - 1)} disabled={page === 0} style={paginationButton(page === 0)}>Previous</button>
-            <span style={{ color: "#6b7280", fontSize: 13 }}>Page {page + 1} of {Math.max(1, Math.ceil(total / 20))}</span>
-            <button onClick={() => load(page + 1)} disabled={(page + 1) * 20 >= total} style={paginationButton((page + 1) * 20 >= total)}>Next</button>
+          </div>}
+          {jobs.length > 0 && <div className="lp-jobs-pagination">
+            <button onClick={() => sort === 'match' ? setPage(page - 1) : load(page - 1)} disabled={page === 0} className="wf-secondary">Previous</button>
+            <span>Page {page + 1} of {Math.max(1, Math.ceil(total / 20))}</span>
+            <button onClick={() => sort === 'match' ? setPage(page + 1) : load(page + 1)} disabled={(page + 1) * 20 >= total} className="wf-secondary">Next</button>
           </div>}
         </>
       )}
