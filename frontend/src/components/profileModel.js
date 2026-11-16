@@ -137,9 +137,8 @@ export const emptyExperience = () => ({ company: '', title: '', start: '', end: 
 export const emptyProject = () => ({ title: '', technologies: '', url: '', description: '' });
 export const emptyProfileDetails = { phone:'', location:'', photo:'', projects:[], experience:[], work_types:[], salary_range:'', preferred_location:'', proficiency:{}, career_focus:'', college_major:'' };
 const filled = value => typeof value === 'string' && value.trim().length > 0;
-// Intentionally identical to Dashboard's 10 saved-profile completion checks.
 export function profileCompletion(user, details, resume) {
-  const checks = [filled(user.name), filled(user.email), filled(details.phone), filled(details.location), filled(details.photo), filled(user.skills), Boolean(resume?.filename), filled(details.college_major), (details.work_types || []).length > 0, filled(details.preferred_location)];
+  const checks = [filled(user.name), filled(user.email), filled(details.phone), filled(details.location), filled(details.photo), filled(user.skills), Boolean(resume?.filename), (details.work_types || []).length > 0, filled(details.preferred_location)];
   return Math.round(checks.filter(Boolean).length / checks.length * 100);
 }
 export const profileSnapshot = (profile, details, skills) => JSON.stringify({ profile, details, skills });

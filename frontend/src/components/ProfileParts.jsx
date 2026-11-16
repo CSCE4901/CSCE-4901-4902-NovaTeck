@@ -7,9 +7,9 @@ export function ProfileField({ id, label, error, as = 'input', children, ...prop
   const Control = as;
   return <div className="lp-profile-field"><label htmlFor={id}>{label}</label><Control id={id} {...props} aria-invalid={error ? 'true' : undefined} aria-describedby={error ? `${id}-error` : props['aria-describedby']}>{children}</Control>{error && <p id={`${id}-error`} className="lp-profile-field-error" role="alert">{error}</p>}</div>;
 }
-export function ProfileSection({ number, title, subtitle, id, children, action }) {
+export function ProfileSection({ sectionLabel, title, subtitle, id, children, action }) {
   return <section className="lp-profile-card" id={id} aria-labelledby={`${id}-heading`} tabIndex={id === 'profile-account-settings' ? -1 : undefined}>
-    <header className="lp-profile-card-header"><div><p className="lp-profile-kicker">{number} / YOUR PROFILE</p><h2 id={`${id}-heading`}>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>{action}</header>{children}
+    <header className="lp-profile-card-header"><div><p className="lp-profile-kicker">{sectionLabel}</p><h2 id={`${id}-heading`}>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>{action}</header>{children}
   </section>;
 }
 export function ProfileHeader({ name, completion }) {

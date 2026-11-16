@@ -54,8 +54,7 @@ export default function HomePage({ setPage, auth, request, browseField }) {
       {error ? <p role="alert">{error}</p> : <div className="nt-market-counts">{[['jobs', 'DFW jobs'], ['companies', 'Companies hiring']].map(([key, label]) => <div key={key}><CountUp value={content?.stats[key]} /><span>{label}</span></div>)}</div>}
     </div>
 
-    <section className="nt-journey" aria-labelledby="nt-journey-title">
-      <header className="nt-section-heading"><h2 id="nt-journey-title">You bring the ambition.<br /><span>We’ll help with the direction.</span></h2><p>Start with what you know. See where you can go. Take it at your own pace.</p></header>
+    <section className="nt-journey" aria-label="Profile, resume, and skill gap">
       <ol className="nt-steps">{steps.map(step => <li key={step.title}>
         <div className="lp-step-top"><span className="nt-step-icon"><NavIcon name={step.icon} /></span><span className="lp-step-route" aria-hidden="true">{step.page === 'skillgap' ? 'YOUR NEXT MOVE' : step.icon === 'upload' ? 'YOUR EXPERIENCE' : 'YOUR STARTING POINT'}</span></div>
         <h3>{step.title}</h3><p>{step.description}</p>
@@ -70,6 +69,6 @@ export default function HomePage({ setPage, auth, request, browseField }) {
       </button>)}</div>
     </section>
 
-    <aside className="nt-bottom-note"><NavIcon name="match" /><p>You don’t need to have it all figured out.<br /><strong>Just a place to start.</strong></p><button className="nt-text-link" onClick={() => setPage('jobs')}>Explore all opportunities <span aria-hidden="true">↗</span></button></aside>
+    <div className="nt-bottom-note"><button className="nt-text-link" onClick={() => setPage('jobs')}>Explore all opportunities <span aria-hidden="true">↗</span></button></div>
   </main>;
 }

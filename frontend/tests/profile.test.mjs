@@ -8,18 +8,18 @@ import {emptyProfileDetails,profileCompletion,profileValidation,profileSnapshot,
 const user={name:'Jamie Rivera',email:'jamie@example.com',skills:'Python'};
 const details={...emptyProfileDetails,phone:'2145550123',location:'Dallas',photo:'data:image/png;base64,x',college_major:'Computer Science',work_types:['Full-time'],preferred_location:'Dallas'};
 
-test('Profile completion reproduces all ten Dashboard checks and ignores extras',()=>{
+test('Profile completion counts the nine visible profile checks and ignores extras',()=>{
  const resume={filename:'resume.pdf'};
  assert.equal(profileCompletion(user,details,resume),100);
  assert.equal(profileCompletion({},emptyProfileDetails,null),0);
- for(const [type,key] of [['user','name'],['user','email'],['user','skills'],['details','phone'],['details','location'],['details','photo'],['details','college_major'],['details','work_types'],['details','preferred_location'],['resume','filename']]){
+ for(const [type,key] of [['user','name'],['user','email'],['user','skills'],['details','phone'],['details','location'],['details','photo'],['details','work_types'],['details','preferred_location'],['resume','filename']]){
   const currentUser={...user},currentDetails={...details},currentResume={...resume};
   ({user:currentUser,details:currentDetails,resume:currentResume})[type][key]=key==='work_types'?[]:' ';
   // Dashboard treats a resume filename by presence, while text fields are trimmed.
   if(type==='resume')currentResume.filename='';
-  assert.equal(profileCompletion(currentUser,currentDetails,currentResume),90,`${type}.${key}`);
+  assert.equal(profileCompletion(currentUser,currentDetails,currentResume),89,`${type}.${key}`);
  }
- assert.equal(profileCompletion(user,{...details,projects:[],experience:[],salary_range:'',proficiency:{}},resume),100);
+ assert.equal(profileCompletion(user,{...details,projects:[],experience:[],salary_range:'',proficiency:{},college_major:''},resume),100);
 });
 test('inline validation rejects invalid contact data, reversed dates and unsafe project URLs',()=>{
  const errors=profileValidation({name:' ',email:'bad'}, {...details,phone:'-------',experience:[{start:'2026-05-01',end:'2025-04-01'}],projects:[{title:'',url:'javascript:alert(1)'}]});

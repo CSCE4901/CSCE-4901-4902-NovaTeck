@@ -140,7 +140,6 @@ html .app-shell .lp-jobs-state h2 { color: var(--lp-text) !important; font-size:
 }
 @media (prefers-reduced-motion: reduce) { .lp-jobs *, .lp-jobs *::before, .lp-jobs *::after { animation: none !important; transition: none !important; } }
 
-.lp-sort-note { display: block; font-size: 14px; line-height: 1.7; color: var(--lp-muted); margin-top: var(--lp-space-2); }
 
 html .app-shell .lp-jobs :is(.nova-job-search > button, .nova-filter-footer button, .nova-skill-options label, .nova-skill-options button, .nova-filter-pill, .lp-jobs-pagination button, .lp-jobs-state button, .nova-full-location-list) { font-size: 14px !important; }
 .lp-job-compensation strong.is-unlisted { color: var(--lp-muted); font-weight: 400; }

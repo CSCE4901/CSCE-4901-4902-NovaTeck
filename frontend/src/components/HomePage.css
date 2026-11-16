@@ -35,9 +35,6 @@
 .lp-count::after { content: counter(lp-stat); }
 .lp-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 .lp-home h2 { font-size: var(--lp-text-2xl); line-height: var(--lp-leading-heading); letter-spacing: -.04em; font-weight: 550; }
-.lp-home .nt-section-heading { max-width: 650px; margin-bottom: var(--lp-space-8); }
-.lp-home .nt-section-heading h2 span { color: var(--lp-muted); }
-.lp-home .nt-section-heading > p { max-width: 430px; margin-top: var(--lp-space-4); font-size: var(--lp-text-sm); line-height: var(--lp-leading-body); color: var(--lp-muted); }
 .lp-home .nt-steps { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); list-style: none; margin: 0; padding: 0; gap: var(--lp-space-8); }
 .lp-home .nt-steps li { position: relative; display: flex; flex-direction: column; padding: var(--lp-space-6) 0 0; border-top: 1px solid var(--lp-border); }
 .lp-step-top { display: flex; align-items: center; gap: var(--lp-space-3); margin-bottom: var(--lp-space-6); }
@@ -70,10 +67,7 @@
 .lp-home .nt-field-arrow { grid-row: 1; grid-column: 2; color: var(--lp-primary); font: 400 20px/1 var(--lp-font-mono); }
 .lp-home .nt-field:hover { transform: translateY(-3px); background: var(--lp-surface-blue); box-shadow: var(--lp-shadow-md); }
 .lp-home .nt-field:active { transform: translateY(1px); }
-.lp-home .nt-bottom-note { display: flex; align-items: center; gap: var(--lp-space-5); margin-top: var(--lp-space-16); padding-top: var(--lp-space-6); border-top: 1px solid var(--lp-border); }
-.lp-home .nt-bottom-note > svg { width: 28px; height: 28px; color: var(--lp-accent); }
-.lp-home .nt-bottom-note > p { color: var(--lp-muted); font-size: 14px; line-height: var(--lp-leading-body); }
-.lp-home .nt-bottom-note strong { font-weight: 500; color: var(--lp-text); }
+.lp-home .nt-bottom-note { display: flex; justify-content: flex-end; margin-top: var(--lp-space-16); padding-top: var(--lp-space-6); border-top: 1px solid var(--lp-border); }
 .lp-home .nt-bottom-note button { margin-left: auto; font-size: 14px; }
 @media (prefers-reduced-motion: no-preference) {
   .lp-home .nt-hero-copy { animation: lp-enter var(--lp-duration-enter) var(--lp-ease-enter) both; }
@@ -110,8 +104,7 @@
   .lp-home .nt-steps li > p { max-width: 100%; margin-bottom: var(--lp-space-3); }
   .lp-home .nt-fields { grid-template-columns: 1fr; gap: var(--lp-space-6); padding-top: var(--lp-space-12); }
   .lp-home .nt-fields-intro > p { max-width: 340px; }
-  .lp-home .nt-bottom-note { flex-wrap: wrap; margin-top: var(--lp-space-12); }
-  .lp-home .nt-bottom-note button { margin-left: 48px; }
+  .lp-home .nt-bottom-note { margin-top: var(--lp-space-12); }
 }
 @media (max-width: 380px) {
   .lp-home .nt-field-grid { grid-template-columns: 1fr; }

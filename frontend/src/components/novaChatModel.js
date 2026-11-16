@@ -2,9 +2,9 @@ import { plainJobText } from './jobDescriptionText.js';
 
 export const NOVA_MESSAGE_LIMIT = 2000;
 export const novaStarters = [
-  { prompt: 'Help me build a learning plan', hint: 'Find a clear path to your next skill.', icon: 'plan' },
-  { prompt: 'Practice a tech interview', hint: 'Build confidence, one answer at a time.', icon: 'interview' },
-  { prompt: 'Improve my resume bullet points', hint: 'Turn your experience into a stronger story.', icon: 'resume' },
+  { prompt: 'Help me build a learning plan', icon: 'plan' },
+  { prompt: 'Practice a tech interview', icon: 'interview' },
+  { prompt: 'Improve my resume bullet points', icon: 'resume' },
 ];
 export function novaSkillNames(skills) {
   if (!Array.isArray(skills)) return [];

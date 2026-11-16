@@ -15,11 +15,8 @@ html .app-shell .sg-page .text-button { color:var(--lp-primary); text-align:left
 html .app-shell .sg-page .sg-kicker { font:500 14px/1.6 var(--lp-font-mono); letter-spacing:.07em; color:var(--lp-accent); margin-bottom:var(--lp-space-3); }
 html .app-shell .sg-page section { margin:0!important; }
 html .app-shell .sg-page :is(.sg-target,.sg-resume,.sg-skills-pair > section,.sg-match,.sg-gap,.nova-flagged-panel,.sg-learning,.sg-extras) { border:1px solid var(--lp-border); border-radius:var(--lp-radius-lg); padding:var(--lp-space-6); background:var(--lp-surface)!important; box-shadow:var(--lp-shadow-sm); }
-html .app-shell .sg-page .sg-target { display:grid; grid-template-columns:.7fr 1.3fr; gap:var(--lp-space-3) var(--lp-space-6); align-items:start; }
-.sg-target > p { grid-column:1 / -1; }
-.sg-target label,.sg-category { display:flex; flex-direction:column; gap:var(--lp-space-2); color:var(--lp-muted); }
+.sg-target label { display:flex; flex-direction:column; gap:var(--lp-space-2); color:var(--lp-muted); }
 html .app-shell .sg-page select { width:100%; min-height:48px; padding:var(--lp-space-3); border:1px solid var(--lp-input-border); color:var(--lp-text); border-radius:var(--lp-radius-sm); background:var(--lp-surface); }
-html .app-shell .sg-page .sg-category { padding-inline:var(--lp-space-6); }
 html .app-shell .sg-page .sg-resume { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:var(--lp-space-5); align-items:center; }
 .sg-resume > div:first-child,.sg-resume > p,.sg-resume > .sg-skeleton { grid-column:1 / -1; }
 .sg-resume-meta { display:flex; flex-wrap:wrap; gap:var(--lp-space-4) var(--lp-space-8); }
@@ -85,9 +82,8 @@ html .app-shell .sg-page .nova-flagged-bulk { display:grid; grid-template-column
 @keyframes sg-ring-enter { from { stroke-dashoffset:100; } to { stroke-dashoffset:calc(100 - var(--sg-match)); } }
 @keyframes sg-loading-pulse { from { transform:translateX(-100%); } to { transform:translateX(400%); } }
 @media (max-width:700px) {
- html .app-shell .sg-page :is(.sg-target,.sg-skills-pair,.sg-match-layout,.sg-resources,.sg-resume) { grid-template-columns:1fr; }
+ html .app-shell .sg-page :is(.sg-skills-pair,.sg-match-layout,.sg-resources,.sg-resume) { grid-template-columns:1fr; }
  html .app-shell .sg-page :is(.sg-target,.sg-resume,.sg-skills-pair > section,.sg-match,.sg-gap,.nova-flagged-panel,.sg-learning,.sg-extras) { padding:var(--lp-space-4); }
- html .app-shell .sg-page .sg-target > p { grid-column:1; }
  .sg-page .sg-resume > button { justify-self:start; }
  html .app-shell .sg-page .pending-skill { grid-template-columns:minmax(0,1fr) auto; }
  .sg-page .nova-flagged-choice { grid-column:1 / -1; }

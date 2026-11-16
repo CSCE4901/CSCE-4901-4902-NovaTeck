@@ -1,4 +1,5 @@
 import ProfilePage from './ProfilePage';
+import { profileCompletion } from './profileModel';
 import CompactSimilarJob from './CompactSimilarJob';
 import JobLocation from './JobLocation';
 import ResumeMatch from './ResumeMatch';
@@ -82,11 +83,8 @@ export function WireDashboard({ auth, request, goJob, setPage }) {
       .then(([saved, recommended, applications, user, details, resume]) => { if (active) {
         setSaved(saved); setRecommended(recommended); setApplications(applications);
         const filled = value => typeof value === 'string' && value.trim().length > 0;
-        const sections = [filled(user.name), filled(user.email), filled(details.phone), filled(details.location),
-          filled(details.photo), filled(user.skills), Boolean(resume?.filename), filled(details.college_major),
-          (details.work_types || []).length > 0, filled(details.preferred_location)];
-        setCompletion(Math.round(sections.filter(Boolean).length / sections.length * 100));
-        const needs = [!resume?.filename && 'Scan your resume to discover skills for your profile', !filled(user.skills) && 'Add skills to improve matches', !filled(details.college_major) && 'Choose your career focus', !filled(details.location) && 'Add your location', !filled(details.phone) && 'Add your phone number', !filled(details.photo) && 'Add a profile photo', !(details.work_types || []).length && 'Choose preferred work types', !filled(details.preferred_location) && 'Choose a preferred location'];
+        setCompletion(profileCompletion(user, details, resume));
+        const needs = [!resume?.filename && 'Scan your resume to discover skills for your profile', !filled(user.skills) && 'Add skills to improve matches', !filled(details.location) && 'Add your location', !filled(details.phone) && 'Add your phone number', !filled(details.photo) && 'Add a profile photo', !(details.work_types || []).length && 'Choose preferred work types', !filled(details.preferred_location) && 'Choose a preferred location'];
         setProfileHint(needs.find(Boolean) || 'Your profile is complete');
       } })
       .catch(error => active && setMessage(error.message)).finally(() => active && setLoading(false));
