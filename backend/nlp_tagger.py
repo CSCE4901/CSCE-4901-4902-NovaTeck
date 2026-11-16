@@ -52,6 +52,8 @@ KNOWN_SKILLS = [
     "system architecture", "llm apis", "agent frameworks", "agentic ai",
     "erp", "manufacturing operations", "business intelligence", "logistics",
     "data science", "containerization", "web design", "dashboard development",
+    "networking", "troubleshooting", "cisco ios", "junos", "comptia server+",
+    "comptia network+", "time management", "leadership", "data center operations",
 ]
 
 REQUIRED_SIGNALS = [
@@ -325,6 +327,12 @@ _ALIASES = {
     'containers': 'containerization', 'software dashboards': 'dashboard development',
     'claude': 'claude code', 'copilot': 'github copilot', 'codex': 'openai codex',
     'rag': 'retrieval-augmented generation', 'retrieval augmented generation': 'retrieval-augmented generation',
+    'computer networking': 'networking', 'network administration': 'networking',
+    'juniper junos': 'junos', 'server+': 'comptia server+', 'network+': 'comptia network+',
+    'troubleshoot': 'troubleshooting', 'diagnose and resolve technical issues': 'troubleshooting',
+    'lead a team': 'leadership', 'leading and mentoring': 'leadership',
+    'computer hardware': 'hardware', 'data centers': 'data center operations',
+    'data center': 'data center operations',
 }
 
 
